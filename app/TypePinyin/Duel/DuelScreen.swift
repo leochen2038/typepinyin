@@ -1,0 +1,206 @@
+import SpriteKit
+import SwiftUI
+
+/// 比武界面，自上而下：状态栏、战斗区、招式牌、键盘（放在界面里，主角的手才能伸到键上）。
+struct DuelScreen: View {
+    @State var c: DuelController
+    @State private var showPanel = false
+    @State private var cardFrames: [Int: CGRect] = [:]
+    @State private var battleFrame: CGRect = .zero
+    @State private var keyboardFrame: CGRect = .zero
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        VStack(spacing: 0) {
+            StatusBarView(c: c)
+                .overlay(PanelGesture { showPanel = true })
+            Rectangle().fill(Palette.ink).frame(height: 3)
+            ZStack(alignment: .topLeading) {
+                SpriteView(scene: c.scene, preferredFramesPerSecond: 120, options: [.ignoresSiblingOrder])
+                    .accessibilityHidden(true)
+                ComboView(combo: c.combo, goldAt: c.tuning.comboGoldAt, redAt: c.tuning.comboRedAt, heat: c.heat)
+                    .padding(.leading, 20).padding(.top, 14)
+                    .animation(.spring(duration: 0.2), value: c.combo)
+                PressureBarHost(c: c)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .padding(.trailing, 14).padding(.top, 12)
+                if let inc = c.incoming {
+                    IncomingBox(incoming: inc, progress: c.incomingProgress)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .padding(.trailing, 14).padding(.top, 10)
+                }
+                if let s = c.newMoveToast {
+                    NewMoveToast(syllable: s).frame(maxWidth: .infinity).padding(.top, 24)
+                }
+                if c.killBanner {
+                    KillBanner().frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                if c.finaleBanner {
+                    FinaleBanner().frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                NearMissLayer(trigger: c.nearMissToast)
+            }
+            .frame(maxHeight: .infinity)
+            .clipped()
+            .background(GeometryReader { g in Color.clear.preference(key: BattleFrameKey.self, value: g.frame(in: .named("duel"))) })
+            .modifier(Shake(trigger: c.mistakeFlash, enabled: !reduceMotion))
+            Rectangle().fill(Palette.ink).frame(height: 3)
+            CardsView(c: c)
+                .padding(.bottom, 8)
+                .zIndex(1)      // 打完一个字迸的纸屑要盖在键盘上面，不然往下落就被键盘挡掉
+            KeyboardHost(controller: c)
+                .background(GeometryReader { g in Color.clear.preference(key: KeyboardFrameKey.self, value: g.frame(in: .named("duel"))) })
+                .background(Palette.mist2.ignoresSafeArea(edges: .bottom))
+                .background(KeyInputHost(controller: c).frame(width: 1, height: 1).opacity(0.01))
+        }
+        .background(Palette.mist)
+        .coordinateSpace(.named("duel"))
+        .onPreferenceChange(CardFrameKey.self) { cardFrames = $0 }
+        .onPreferenceChange(BattleFrameKey.self) { battleFrame = $0 }
+        .onPreferenceChange(KeyboardFrameKey.self) { keyboardFrame = $0 }
+        .overlay {
+            FXOverlay(c: c, cardFrames: cardFrames, battleFrame: battleFrame, keyboardFrame: keyboardFrame)
+        }
+
+        .overlay {
+            if let s = c.summary {
+                ZStack {
+                    Color.black.opacity(0.3).ignoresSafeArea(edges: .top)
+                    SummaryCardView(s: s, foe: c.foeName, fasterBy: c.fasterBy) { c.restart() }
+                }
+                .transition(.opacity)
+            }
+        }
+        .overlay {
+            if c.pausedForBackground {
+                ZStack {
+                    Color.black.opacity(0.4).ignoresSafeArea(edges: .top)
+                    Button { c.resumeFromBackground() } label: {
+                        Text("继续").font(Fonts.display(30)).padding(.horizontal, 40).padding(.vertical, 12)
+                            .background(Palette.gold).foregroundStyle(Palette.ink)
+                            .overlay(Rectangle().stroke(Palette.ink, lineWidth: 3))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("continue")
+                }
+            }
+        }
+        .animation(.spring(duration: 0.3), value: c.finaleBanner)
+        .animation(.spring(duration: 0.18, bounce: 0.4), value: c.killBanner)
+        .animation(.easeOut(duration: 0.25), value: c.summary != nil)
+        .sheet(isPresented: $showPanel) { TuningPanelView(c: c) }
+        .onAppear {
+            c.scene.reducedMotion = reduceMotion
+            c.start()
+        }
+        .modifier(Lifecycle(c: c))
+    }
+
+}
+
+/// 最上层的演出：回顾牌、取字（剑气 / 绳镖）。各层各自读自己的状态：
+/// 打字时取字每个键都在变，要是放在一起，回顾牌也会跟着整张重建（连缓存的字母图都要重画）。
+struct FXOverlay: View {
+    let c: DuelController
+    let cardFrames: [Int: CGRect]
+    let battleFrame: CGRect
+    let keyboardFrame: CGRect
+
+    var body: some View {
+        ZStack {
+            ReviewHost(c: c, cardFrames: cardFrames)
+            if battleFrame != .zero && keyboardFrame != .zero {
+                GrabHost(c: c, hand: { toScreen(c.scene.playerHand) }, chest: { toScreen(c.scene.playerChest) }, key: { ch in
+                    c.keyCenter(ch).map { CGPoint(x: keyboardFrame.minX + $0.x, y: keyboardFrame.minY + $0.y) }
+                })
+            }
+        }
+    }
+
+    /// 战斗区（SpriteKit，y 向上）里的点 → 界面坐标（y 向下）。
+    private func toScreen(_ p: CGPoint?) -> CGPoint {
+        guard let p else { return CGPoint(x: battleFrame.midX, y: battleFrame.midY) }
+        return CGPoint(x: battleFrame.minX + p.x, y: battleFrame.minY + battleFrame.height - p.y)
+    }
+}
+
+struct ReviewHost: View {
+    let c: DuelController
+    let cardFrames: [Int: CGRect]
+    var body: some View {
+        ReviewLayer(reviews: c.reviews, cardFrames: cardFrames, big: c.cards.count == 1, rank: c.tuning.rankFx, theme: c.tuning.rankFxTheme)
+    }
+}
+
+struct GrabHost: View {
+    let c: DuelController
+    let hand: () -> CGPoint
+    let chest: () -> CGPoint
+    let key: (Character) -> CGPoint?
+    var body: some View { GrabLayer(grabs: c.grabs, chains: c.chains, hand: hand, chest: chest, key: key, style: c.tuning.grabStyle, hot: c.heat >= 3) }
+}
+
+/// 已学会的音节打错时，战斗区红色抖动。
+struct Shake: GeometryEffect {
+    var trigger: Int
+    var enabled: Bool
+    var animatableData: CGFloat
+
+    init(trigger: Int, enabled: Bool) {
+        self.trigger = trigger
+        self.enabled = enabled
+        self.animatableData = CGFloat(trigger)
+    }
+
+    func effectValue(size: CGSize) -> ProjectionTransform {
+        guard enabled else { return ProjectionTransform(.identity) }
+        let x = sin(animatableData * .pi * 6) * 6 * (1 - (animatableData - floor(animatableData)))
+        return ProjectionTransform(CGAffineTransform(translationX: x, y: 0))
+    }
+}
+
+/// 调参面板的隐藏入口：在状态栏上连点三下。
+struct PanelGesture: UIViewRepresentable {
+    let action: () -> Void
+
+    func makeUIView(context: Context) -> UIView {
+        let v = UIView()
+        v.backgroundColor = .clear
+        let g = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.fire(_:)))
+        g.numberOfTapsRequired = 3
+        v.addGestureRecognizer(g)
+        return v
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) { context.coordinator.action = action }
+    func makeCoordinator() -> Coordinator { Coordinator(action: action) }
+
+    @MainActor final class Coordinator: NSObject {
+        var action: () -> Void
+        init(action: @escaping () -> Void) { self.action = action }
+        @objc func fire(_ g: UITapGestureRecognizer) { if g.state == .ended { action() } }
+    }
+}
+
+/// 每次按偏冒一下「差一点」，0.8 秒后消失。
+struct NearMissLayer: View {
+    let trigger: Int
+    @State private var visible = false
+
+    var body: some View {
+        ZStack {
+            if visible { NearMissToast() }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+        .padding(.bottom, 64)
+        .animation(.easeOut(duration: 0.15), value: visible)
+        .onChange(of: trigger) { _, _ in
+            visible = true
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(0.8))
+                visible = false
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}

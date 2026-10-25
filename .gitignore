@@ -1,0 +1,20 @@
+# Xcode / Swift
+app/*.xcodeproj
+.build/
+DerivedData/
+*.swiftpm/
+xcuserdata/
+*.xcuserstate
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+
+# Universal
+.DS_Store
+*.tmp
+*.swp
+.vscode/
+.idea/

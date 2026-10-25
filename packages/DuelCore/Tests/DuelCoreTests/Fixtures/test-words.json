@@ -1,0 +1,549 @@
+{
+ "syllables": [
+  {
+   "spelling": "bao",
+   "volume": "x",
+   "isHard": false,
+   "parts": {
+    "initial": "",
+    "medial": "",
+    "final": "bao"
+   }
+  },
+  {
+   "spelling": "chi",
+   "volume": "x",
+   "isHard": false,
+   "parts": {
+    "initial": "",
+    "medial": "",
+    "final": "chi"
+   }
+  },
+  {
+   "spelling": "chuang",
+   "volume": "x",
+   "isHard": true,
+   "parts": {
+    "initial": "",
+    "medial": "",
+    "final": "chuang"
+   }
+  },
+  {
+   "spelling": "da",
+   "volume": "x",
+   "isHard": false,
+   "parts": {
+    "initial": "",
+    "medial": "",
+    "final": "da"
+   }
+  },
+  {
+   "spelling": "fan",
+   "volume": "x",
+   "isHard": false,
+   "parts": {
+    "initial": "",
+    "medial": "",
+    "final": "fan"
+   }
+  },
+  {
+   "spelling": "gong",
+   "volume": "x",
+   "isHard": false,
+   "parts": {
+    "initial": "",
+    "medial": "",
+    "final": "gong"
+   }
+  },
+  {
+   "spelling": "guang",
+   "volume": "x",
+   "isHard": true,
+   "parts": {
+    "initial": "",
+    "medial": "",
+    "final": "guang"
+   }
+  },
+  {
+   "spelling": "gui",
+   "volume": "x",
+   "isHard": true,
+   "parts": {
+    "initial": "",
+    "medial": "",
+    "final": "gui"
+   }
+  },
+  {
+   "spelling": "hai",
+   "volume": "x",
+   "isHard": false,
+   "parts": {
+    "initial": "",
+    "medial": "",
+    "final": "hai"
+   }
+  },
+  {
+   "spelling": "hu",
+   "volume": "x",
+   "isHard": false,
+   "parts": {
+    "initial": "",
+    "medial": "",
+    "final": "hu"
+   }
+  },
+  {
+   "spelling": "huang",
+   "volume": "x",
+   "isHard": true,
+   "parts": {
+    "initial": "",
+    "medial": "",
+    "final": "huang"
+   }
+  },
+  {
+   "spelling": "hun",
+   "volume": "x",
+   "isHard": true,
+   "parts": {
+    "initial": "",
+    "medial": "",
+    "final": "hun"
+   }
+  },
+  {
+   "spelling": "jia",
+   "volume": "x",
+   "isHard": true,
+   "parts": {
+    "initial": "",
+    "medial": "",
+    "final": "jia"
+   }
+  },
+  {
+   "spelling": "kai",
+   "volume": "x",
+   "isHard": false,
+   "parts": {
+    "initial": "",
+    "medial": "",
+    "final": "kai"
+   }
+  },
+  {
+   "spelling": "lin",
+   "volume": "x",
+   "isHard": false,
+   "parts": {
+    "initial": "",
+    "medial": "",
+    "final": "lin"
+   }
+  },
+  {
+   "spelling": "lv",
+   "volume": "x",
+   "isHard": true,
+   "parts": {
+    "initial": "",
+    "medial": "",
+    "final": "lv"
+   }
+  },
+  {
+   "spelling": "ma",
+   "volume": "x",
+   "isHard": false,
+   "parts": {
+    "initial": "",
+    "medial": "",
+    "final": "ma"
+   }
+  },
+  {
+   "spelling": "mao",
+   "volume": "x",
+   "isHard": false,
+   "parts": {
+    "initial": "",
+    "medial": "",
+    "final": "mao"
+   }
+  },
+  {
+   "spelling": "ming",
+   "volume": "x",
+   "isHard": false,
+   "parts": {
+    "initial": "",
+    "medial": "",
+    "final": "ming"
+   }
+  },
+  {
+   "spelling": "nuan",
+   "volume": "x",
+   "isHard": true,
+   "parts": {
+    "initial": "",
+    "medial": "",
+    "final": "nuan"
+   }
+  },
+  {
+   "spelling": "peng",
+   "volume": "x",
+   "isHard": false,
+   "parts": {
+    "initial": "",
+    "medial": "",
+    "final": "peng"
+   }
+  },
+  {
+   "spelling": "ren",
+   "volume": "x",
+   "isHard": false,
+   "parts": {
+    "initial": "",
+    "medial": "",
+    "final": "ren"
+   }
+  },
+  {
+   "spelling": "se",
+   "volume": "x",
+   "isHard": false,
+   "parts": {
+    "initial": "",
+    "medial": "",
+    "final": "se"
+   }
+  },
+  {
+   "spelling": "sen",
+   "volume": "x",
+   "isHard": false,
+   "parts": {
+    "initial": "",
+    "medial": "",
+    "final": "sen"
+   }
+  },
+  {
+   "spelling": "shan",
+   "volume": "x",
+   "isHard": false,
+   "parts": {
+    "initial": "",
+    "medial": "",
+    "final": "shan"
+   }
+  },
+  {
+   "spelling": "tian",
+   "volume": "x",
+   "isHard": true,
+   "parts": {
+    "initial": "",
+    "medial": "",
+    "final": "tian"
+   }
+  },
+  {
+   "spelling": "wen",
+   "volume": "x",
+   "isHard": true,
+   "parts": {
+    "initial": "",
+    "medial": "",
+    "final": "wen"
+   }
+  },
+  {
+   "spelling": "xia",
+   "volume": "x",
+   "isHard": true,
+   "parts": {
+    "initial": "",
+    "medial": "",
+    "final": "xia"
+   }
+  },
+  {
+   "spelling": "xin",
+   "volume": "x",
+   "isHard": false,
+   "parts": {
+    "initial": "",
+    "medial": "",
+    "final": "xin"
+   }
+  },
+  {
+   "spelling": "xiong",
+   "volume": "x",
+   "isHard": true,
+   "parts": {
+    "initial": "",
+    "medial": "",
+    "final": "xiong"
+   }
+  },
+  {
+   "spelling": "xiu",
+   "volume": "x",
+   "isHard": true,
+   "parts": {
+    "initial": "",
+    "medial": "",
+    "final": "xiu"
+   }
+  },
+  {
+   "spelling": "yi",
+   "volume": "x",
+   "isHard": true,
+   "parts": {
+    "initial": "",
+    "medial": "",
+    "final": "yi"
+   }
+  },
+  {
+   "spelling": "you",
+   "volume": "x",
+   "isHard": true,
+   "parts": {
+    "initial": "",
+    "medial": "",
+    "final": "you"
+   }
+  },
+  {
+   "spelling": "zhen",
+   "volume": "x",
+   "isHard": false,
+   "parts": {
+    "initial": "",
+    "medial": "",
+    "final": "zhen"
+   }
+  },
+  {
+   "spelling": "zhuang",
+   "volume": "x",
+   "isHard": true,
+   "parts": {
+    "initial": "",
+    "medial": "",
+    "final": "zhuang"
+   }
+  }
+ ],
+ "words": [
+  {
+   "text": "朋友",
+   "syllables": [
+    "peng",
+    "you"
+   ],
+   "volume": "base"
+  },
+  {
+   "text": "装修",
+   "syllables": [
+    "zhuang",
+    "xiu"
+   ],
+   "volume": "base"
+  },
+  {
+   "text": "光明",
+   "syllables": [
+    "guang",
+    "ming"
+   ],
+   "volume": "base"
+  },
+  {
+   "text": "窗户",
+   "syllables": [
+    "chuang",
+    "hu"
+   ],
+   "volume": "base"
+  },
+  {
+   "text": "熊猫",
+   "syllables": [
+    "xiong",
+    "mao"
+   ],
+   "volume": "base"
+  },
+  {
+   "text": "认真",
+   "syllables": [
+    "ren",
+    "zhen"
+   ],
+   "volume": "biyin-shang"
+  },
+  {
+   "text": "森林",
+   "syllables": [
+    "sen",
+    "lin"
+   ],
+   "volume": "biyin-shang"
+  },
+  {
+   "text": "大家",
+   "syllables": [
+    "da",
+    "jia"
+   ],
+   "volume": "base"
+  },
+  {
+   "text": "吃饭",
+   "syllables": [
+    "chi",
+    "fan"
+   ],
+   "volume": "base"
+  },
+  {
+   "text": "绿色",
+   "syllables": [
+    "lv",
+    "se"
+   ],
+   "volume": "base"
+  },
+  {
+   "text": "妈妈",
+   "syllables": [
+    "ma",
+    "ma"
+   ],
+   "volume": "base"
+  },
+  {
+   "text": "开心",
+   "syllables": [
+    "kai",
+    "xin"
+   ],
+   "volume": "base"
+  },
+  {
+   "text": "宝贵",
+   "syllables": [
+    "bao",
+    "gui"
+   ],
+   "volume": "base"
+  },
+  {
+   "text": "天下",
+   "syllables": [
+    "tian",
+    "xia"
+   ],
+   "volume": "base"
+  },
+  {
+   "text": "温暖",
+   "syllables": [
+    "wen",
+    "nuan"
+   ],
+   "volume": "base"
+  },
+  {
+   "text": "黄昏",
+   "syllables": [
+    "huang",
+    "hun"
+   ],
+   "volume": "base"
+  },
+  {
+   "text": "装修工",
+   "syllables": [
+    "zhuang",
+    "xiu",
+    "gong"
+   ],
+   "volume": "base"
+  },
+  {
+   "text": "一心一意",
+   "syllables": [
+    "yi",
+    "xin",
+    "yi",
+    "yi"
+   ],
+   "volume": "base",
+   "isIdiom": true
+  },
+  {
+   "text": "人山人海",
+   "syllables": [
+    "ren",
+    "shan",
+    "ren",
+    "hai"
+   ],
+   "volume": "base",
+   "isIdiom": true
+  }
+ ],
+ "learned": [
+  "bao",
+  "chi",
+  "chuang",
+  "da",
+  "fan",
+  "gong",
+  "guang",
+  "gui",
+  "hai",
+  "hu",
+  "huang",
+  "hun",
+  "jia",
+  "kai",
+  "lin",
+  "ma",
+  "mao",
+  "ming",
+  "nuan",
+  "peng",
+  "ren",
+  "se",
+  "shan",
+  "tian",
+  "wen",
+  "xia",
+  "xin",
+  "xiu",
+  "yi",
+  "you",
+  "zhen",
+  "zhuang"
+ ]
+}

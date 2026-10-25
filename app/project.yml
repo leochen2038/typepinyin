@@ -1,0 +1,57 @@
+name: TypePinyin
+options:
+  bundleIdPrefix: com.typepinyin
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+packages:
+  DuelCore:
+    path: ../packages/DuelCore
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    DEVELOPMENT_TEAM: 2TMLVD4ZHG
+    CODE_SIGN_STYLE: Automatic
+targets:
+  TypePinyin:
+    type: application
+    platform: iOS
+    sources:
+      - path: TypePinyin
+    dependencies:
+      - package: DuelCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.leochen.typepinyin
+        TARGETED_DEVICE_FAMILY: "1"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+    info:
+      path: TypePinyin/Info.plist
+      properties:
+        CFBundleDisplayName: Type Pinyin
+        CADisableMinimumFrameDurationOnPhone: true
+        UIRequiresFullScreen: true
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIApplicationSupportsIndirectInputEvents: true
+  TypePinyinUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: TypePinyinUITests
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.leochen.typepinyin.uitests
+    dependencies:
+      - target: TypePinyin
+schemes:
+  TypePinyin:
+    build:
+      targets:
+        TypePinyin: all
+        TypePinyinUITests: [test]
+    test:
+      targets: [TypePinyinUITests]

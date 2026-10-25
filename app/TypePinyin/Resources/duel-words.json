@@ -1,0 +1,1701 @@
+{
+ "syllables": [
+  {
+   "spelling": "ba",
+   "volume": "base",
+   "isHard": false,
+   "parts": {
+    "initial": "b",
+    "medial": "",
+    "final": "a"
+   }
+  },
+  {
+   "spelling": "bai",
+   "volume": "liangzi-shang",
+   "isHard": false,
+   "parts": {
+    "initial": "b",
+    "medial": "",
+    "final": "ai"
+   }
+  },
+  {
+   "spelling": "bei",
+   "volume": "liangzi-shang",
+   "isHard": false,
+   "parts": {
+    "initial": "b",
+    "medial": "",
+    "final": "ei"
+   }
+  },
+  {
+   "spelling": "ben",
+   "volume": "biyin-shang",
+   "isHard": false,
+   "parts": {
+    "initial": "b",
+    "medial": "",
+    "final": "en"
+   }
+  },
+  {
+   "spelling": "cao",
+   "volume": "liangzi-xia",
+   "isHard": false,
+   "parts": {
+    "initial": "c",
+    "medial": "",
+    "final": "ao"
+   }
+  },
+  {
+   "spelling": "che",
+   "volume": "base",
+   "isHard": false,
+   "parts": {
+    "initial": "ch",
+    "medial": "",
+    "final": "e"
+   }
+  },
+  {
+   "spelling": "chi",
+   "volume": "base",
+   "isHard": false,
+   "parts": {
+    "initial": "ch",
+    "medial": "",
+    "final": "i"
+   }
+  },
+  {
+   "spelling": "chu",
+   "volume": "base",
+   "isHard": false,
+   "parts": {
+    "initial": "ch",
+    "medial": "",
+    "final": "u"
+   }
+  },
+  {
+   "spelling": "chun",
+   "volume": "shengzi",
+   "isHard": true,
+   "parts": {
+    "initial": "ch",
+    "medial": "",
+    "final": "un"
+   },
+   "hardReason": "省写：iou 写成 iu，uei 写成 ui，uen 写成 un"
+  },
+  {
+   "spelling": "da",
+   "volume": "base",
+   "isHard": false,
+   "parts": {
+    "initial": "d",
+    "medial": "",
+    "final": "a"
+   }
+  },
+  {
+   "spelling": "dao",
+   "volume": "liangzi-xia",
+   "isHard": false,
+   "parts": {
+    "initial": "d",
+    "medial": "",
+    "final": "ao"
+   }
+  },
+  {
+   "spelling": "di",
+   "volume": "base",
+   "isHard": false,
+   "parts": {
+    "initial": "d",
+    "medial": "",
+    "final": "i"
+   }
+  },
+  {
+   "spelling": "dong",
+   "volume": "biyin-xia",
+   "isHard": false,
+   "parts": {
+    "initial": "d",
+    "medial": "",
+    "final": "ong"
+   }
+  },
+  {
+   "spelling": "duo",
+   "volume": "sanpin",
+   "isHard": true,
+   "parts": {
+    "initial": "d",
+    "medial": "u",
+    "final": "o"
+   },
+   "hardReason": "声母 + 介音 + 韵母，中间的介音容易漏"
+  },
+  {
+   "spelling": "er",
+   "volume": "base",
+   "isHard": false,
+   "parts": {
+    "initial": "",
+    "medial": "",
+    "final": "er"
+   }
+  },
+  {
+   "spelling": "fan",
+   "volume": "biyin-shang",
+   "isHard": false,
+   "parts": {
+    "initial": "f",
+    "medial": "",
+    "final": "an"
+   }
+  },
+  {
+   "spelling": "fei",
+   "volume": "liangzi-shang",
+   "isHard": false,
+   "parts": {
+    "initial": "f",
+    "medial": "",
+    "final": "ei"
+   }
+  },
+  {
+   "spelling": "ge",
+   "volume": "base",
+   "isHard": false,
+   "parts": {
+    "initial": "g",
+    "medial": "",
+    "final": "e"
+   }
+  },
+  {
+   "spelling": "gou",
+   "volume": "liangzi-xia",
+   "isHard": false,
+   "parts": {
+    "initial": "g",
+    "medial": "",
+    "final": "ou"
+   }
+  },
+  {
+   "spelling": "guan",
+   "volume": "sanpin",
+   "isHard": true,
+   "parts": {
+    "initial": "g",
+    "medial": "u",
+    "final": "an"
+   },
+   "hardReason": "声母 + 介音 + 韵母，中间的介音容易漏"
+  },
+  {
+   "spelling": "guo",
+   "volume": "sanpin",
+   "isHard": true,
+   "parts": {
+    "initial": "g",
+    "medial": "u",
+    "final": "o"
+   },
+   "hardReason": "声母 + 介音 + 韵母，中间的介音容易漏"
+  },
+  {
+   "spelling": "hai",
+   "volume": "liangzi-shang",
+   "isHard": false,
+   "parts": {
+    "initial": "h",
+    "medial": "",
+    "final": "ai"
+   }
+  },
+  {
+   "spelling": "hao",
+   "volume": "liangzi-xia",
+   "isHard": false,
+   "parts": {
+    "initial": "h",
+    "medial": "",
+    "final": "ao"
+   }
+  },
+  {
+   "spelling": "he",
+   "volume": "base",
+   "isHard": false,
+   "parts": {
+    "initial": "h",
+    "medial": "",
+    "final": "e"
+   }
+  },
+  {
+   "spelling": "hen",
+   "volume": "biyin-shang",
+   "isHard": false,
+   "parts": {
+    "initial": "h",
+    "medial": "",
+    "final": "en"
+   }
+  },
+  {
+   "spelling": "hong",
+   "volume": "biyin-xia",
+   "isHard": false,
+   "parts": {
+    "initial": "h",
+    "medial": "",
+    "final": "ong"
+   }
+  },
+  {
+   "spelling": "hua",
+   "volume": "sanpin",
+   "isHard": true,
+   "parts": {
+    "initial": "h",
+    "medial": "u",
+    "final": "a"
+   },
+   "hardReason": "声母 + 介音 + 韵母，中间的介音容易漏"
+  },
+  {
+   "spelling": "hui",
+   "volume": "shengzi",
+   "isHard": true,
+   "parts": {
+    "initial": "h",
+    "medial": "",
+    "final": "ui"
+   },
+   "hardReason": "省写：iou 写成 iu，uei 写成 ui，uen 写成 un"
+  },
+  {
+   "spelling": "huo",
+   "volume": "sanpin",
+   "isHard": true,
+   "parts": {
+    "initial": "h",
+    "medial": "u",
+    "final": "o"
+   },
+   "hardReason": "声母 + 介音 + 韵母，中间的介音容易漏"
+  },
+  {
+   "spelling": "jia",
+   "volume": "sanpin",
+   "isHard": true,
+   "parts": {
+    "initial": "j",
+    "medial": "i",
+    "final": "a"
+   },
+   "hardReason": "声母 + 介音 + 韵母，中间的介音容易漏"
+  },
+  {
+   "spelling": "kai",
+   "volume": "liangzi-shang",
+   "isHard": false,
+   "parts": {
+    "initial": "k",
+    "medial": "",
+    "final": "ai"
+   }
+  },
+  {
+   "spelling": "kan",
+   "volume": "biyin-shang",
+   "isHard": false,
+   "parts": {
+    "initial": "k",
+    "medial": "",
+    "final": "an"
+   }
+  },
+  {
+   "spelling": "kou",
+   "volume": "liangzi-xia",
+   "isHard": false,
+   "parts": {
+    "initial": "k",
+    "medial": "",
+    "final": "ou"
+   }
+  },
+  {
+   "spelling": "lai",
+   "volume": "liangzi-shang",
+   "isHard": false,
+   "parts": {
+    "initial": "l",
+    "medial": "",
+    "final": "ai"
+   }
+  },
+  {
+   "spelling": "lao",
+   "volume": "liangzi-xia",
+   "isHard": false,
+   "parts": {
+    "initial": "l",
+    "medial": "",
+    "final": "ao"
+   }
+  },
+  {
+   "spelling": "le",
+   "volume": "base",
+   "isHard": false,
+   "parts": {
+    "initial": "l",
+    "medial": "",
+    "final": "e"
+   }
+  },
+  {
+   "spelling": "li",
+   "volume": "base",
+   "isHard": false,
+   "parts": {
+    "initial": "l",
+    "medial": "",
+    "final": "i"
+   }
+  },
+  {
+   "spelling": "liang",
+   "volume": "sanpin",
+   "isHard": true,
+   "parts": {
+    "initial": "l",
+    "medial": "i",
+    "final": "ang"
+   },
+   "hardReason": "声母 + 介音 + 韵母，中间的介音容易漏"
+  },
+  {
+   "spelling": "liu",
+   "volume": "shengzi",
+   "isHard": true,
+   "parts": {
+    "initial": "l",
+    "medial": "",
+    "final": "iu"
+   },
+   "hardReason": "省写：iou 写成 iu，uei 写成 ui，uen 写成 un"
+  },
+  {
+   "spelling": "lv",
+   "volume": "lv",
+   "isHard": true,
+   "parts": {
+    "initial": "l",
+    "medial": "",
+    "final": "v"
+   },
+   "hardReason": "ü 打 v；j、q、x 后面的 ü 写成 u"
+  },
+  {
+   "spelling": "ma",
+   "volume": "base",
+   "isHard": false,
+   "parts": {
+    "initial": "m",
+    "medial": "",
+    "final": "a"
+   }
+  },
+  {
+   "spelling": "mao",
+   "volume": "liangzi-xia",
+   "isHard": false,
+   "parts": {
+    "initial": "m",
+    "medial": "",
+    "final": "ao"
+   }
+  },
+  {
+   "spelling": "mei",
+   "volume": "liangzi-shang",
+   "isHard": false,
+   "parts": {
+    "initial": "m",
+    "medial": "",
+    "final": "ei"
+   }
+  },
+  {
+   "spelling": "men",
+   "volume": "biyin-shang",
+   "isHard": false,
+   "parts": {
+    "initial": "m",
+    "medial": "",
+    "final": "en"
+   }
+  },
+  {
+   "spelling": "mi",
+   "volume": "base",
+   "isHard": false,
+   "parts": {
+    "initial": "m",
+    "medial": "",
+    "final": "i"
+   }
+  },
+  {
+   "spelling": "mu",
+   "volume": "base",
+   "isHard": false,
+   "parts": {
+    "initial": "m",
+    "medial": "",
+    "final": "u"
+   }
+  },
+  {
+   "spelling": "nai",
+   "volume": "liangzi-shang",
+   "isHard": false,
+   "parts": {
+    "initial": "n",
+    "medial": "",
+    "final": "ai"
+   }
+  },
+  {
+   "spelling": "ni",
+   "volume": "base",
+   "isHard": false,
+   "parts": {
+    "initial": "n",
+    "medial": "",
+    "final": "i"
+   }
+  },
+  {
+   "spelling": "niao",
+   "volume": "sanpin",
+   "isHard": true,
+   "parts": {
+    "initial": "n",
+    "medial": "i",
+    "final": "ao"
+   },
+   "hardReason": "声母 + 介音 + 韵母，中间的介音容易漏"
+  },
+  {
+   "spelling": "niu",
+   "volume": "shengzi",
+   "isHard": true,
+   "parts": {
+    "initial": "n",
+    "medial": "",
+    "final": "iu"
+   },
+   "hardReason": "省写：iou 写成 iu，uei 写成 ui，uen 写成 un"
+  },
+  {
+   "spelling": "peng",
+   "volume": "biyin-xia",
+   "isHard": false,
+   "parts": {
+    "initial": "p",
+    "medial": "",
+    "final": "eng"
+   }
+  },
+  {
+   "spelling": "qi",
+   "volume": "base",
+   "isHard": false,
+   "parts": {
+    "initial": "q",
+    "medial": "",
+    "final": "i"
+   }
+  },
+  {
+   "spelling": "qu",
+   "volume": "lv",
+   "isHard": true,
+   "parts": {
+    "initial": "q",
+    "medial": "",
+    "final": "u"
+   },
+   "hardReason": "ü 打 v；j、q、x 后面的 ü 写成 u"
+  },
+  {
+   "spelling": "quan",
+   "volume": "lv",
+   "isHard": true,
+   "parts": {
+    "initial": "q",
+    "medial": "u",
+    "final": "an"
+   },
+   "hardReason": "ü 打 v；j、q、x 后面的 ü 写成 u"
+  },
+  {
+   "spelling": "ren",
+   "volume": "biyin-shang",
+   "isHard": false,
+   "parts": {
+    "initial": "r",
+    "medial": "",
+    "final": "en"
+   }
+  },
+  {
+   "spelling": "ri",
+   "volume": "base",
+   "isHard": false,
+   "parts": {
+    "initial": "r",
+    "medial": "",
+    "final": "i"
+   }
+  },
+  {
+   "spelling": "ru",
+   "volume": "base",
+   "isHard": false,
+   "parts": {
+    "initial": "r",
+    "medial": "",
+    "final": "u"
+   }
+  },
+  {
+   "spelling": "san",
+   "volume": "biyin-shang",
+   "isHard": false,
+   "parts": {
+    "initial": "s",
+    "medial": "",
+    "final": "an"
+   }
+  },
+  {
+   "spelling": "se",
+   "volume": "base",
+   "isHard": false,
+   "parts": {
+    "initial": "s",
+    "medial": "",
+    "final": "e"
+   }
+  },
+  {
+   "spelling": "shan",
+   "volume": "biyin-shang",
+   "isHard": false,
+   "parts": {
+    "initial": "sh",
+    "medial": "",
+    "final": "an"
+   }
+  },
+  {
+   "spelling": "shang",
+   "volume": "biyin-xia",
+   "isHard": false,
+   "parts": {
+    "initial": "sh",
+    "medial": "",
+    "final": "ang"
+   }
+  },
+  {
+   "spelling": "sheng",
+   "volume": "biyin-xia",
+   "isHard": false,
+   "parts": {
+    "initial": "sh",
+    "medial": "",
+    "final": "eng"
+   }
+  },
+  {
+   "spelling": "shi",
+   "volume": "base",
+   "isHard": false,
+   "parts": {
+    "initial": "sh",
+    "medial": "",
+    "final": "i"
+   }
+  },
+  {
+   "spelling": "shou",
+   "volume": "liangzi-xia",
+   "isHard": false,
+   "parts": {
+    "initial": "sh",
+    "medial": "",
+    "final": "ou"
+   }
+  },
+  {
+   "spelling": "shui",
+   "volume": "shengzi",
+   "isHard": true,
+   "parts": {
+    "initial": "sh",
+    "medial": "",
+    "final": "ui"
+   },
+   "hardReason": "省写：iou 写成 iu，uei 写成 ui，uen 写成 un"
+  },
+  {
+   "spelling": "ta",
+   "volume": "base",
+   "isHard": false,
+   "parts": {
+    "initial": "t",
+    "medial": "",
+    "final": "a"
+   }
+  },
+  {
+   "spelling": "tai",
+   "volume": "liangzi-shang",
+   "isHard": false,
+   "parts": {
+    "initial": "t",
+    "medial": "",
+    "final": "ai"
+   }
+  },
+  {
+   "spelling": "tian",
+   "volume": "sanpin",
+   "isHard": true,
+   "parts": {
+    "initial": "t",
+    "medial": "i",
+    "final": "an"
+   },
+   "hardReason": "声母 + 介音 + 韵母，中间的介音容易漏"
+  },
+  {
+   "spelling": "tong",
+   "volume": "biyin-xia",
+   "isHard": false,
+   "parts": {
+    "initial": "t",
+    "medial": "",
+    "final": "ong"
+   }
+  },
+  {
+   "spelling": "tou",
+   "volume": "liangzi-xia",
+   "isHard": false,
+   "parts": {
+    "initial": "t",
+    "medial": "",
+    "final": "ou"
+   }
+  },
+  {
+   "spelling": "wen",
+   "volume": "yw",
+   "isHard": true,
+   "parts": {
+    "initial": "w",
+    "medial": "",
+    "final": "en"
+   },
+   "hardReason": "i、u、ü 开头时要写成 y、w"
+  },
+  {
+   "spelling": "wo",
+   "volume": "yw",
+   "isHard": true,
+   "parts": {
+    "initial": "w",
+    "medial": "",
+    "final": "o"
+   },
+   "hardReason": "i、u、ü 开头时要写成 y、w"
+  },
+  {
+   "spelling": "wu",
+   "volume": "yw",
+   "isHard": true,
+   "parts": {
+    "initial": "w",
+    "medial": "",
+    "final": "u"
+   },
+   "hardReason": "i、u、ü 开头时要写成 y、w"
+  },
+  {
+   "spelling": "xia",
+   "volume": "sanpin",
+   "isHard": true,
+   "parts": {
+    "initial": "x",
+    "medial": "i",
+    "final": "a"
+   },
+   "hardReason": "声母 + 介音 + 韵母，中间的介音容易漏"
+  },
+  {
+   "spelling": "xiao",
+   "volume": "sanpin",
+   "isHard": true,
+   "parts": {
+    "initial": "x",
+    "medial": "i",
+    "final": "ao"
+   },
+   "hardReason": "声母 + 介音 + 韵母，中间的介音容易漏"
+  },
+  {
+   "spelling": "xin",
+   "volume": "biyin-shang",
+   "isHard": false,
+   "parts": {
+    "initial": "x",
+    "medial": "",
+    "final": "in"
+   }
+  },
+  {
+   "spelling": "xing",
+   "volume": "biyin-xia",
+   "isHard": false,
+   "parts": {
+    "initial": "x",
+    "medial": "",
+    "final": "ing"
+   }
+  },
+  {
+   "spelling": "xue",
+   "volume": "lv",
+   "isHard": true,
+   "parts": {
+    "initial": "x",
+    "medial": "",
+    "final": "ue"
+   },
+   "hardReason": "ü 打 v；j、q、x 后面的 ü 写成 u"
+  },
+  {
+   "spelling": "yan",
+   "volume": "yw",
+   "isHard": true,
+   "parts": {
+    "initial": "y",
+    "medial": "",
+    "final": "an"
+   },
+   "hardReason": "i、u、ü 开头时要写成 y、w"
+  },
+  {
+   "spelling": "yang",
+   "volume": "yw",
+   "isHard": true,
+   "parts": {
+    "initial": "y",
+    "medial": "",
+    "final": "ang"
+   },
+   "hardReason": "i、u、ü 开头时要写成 y、w"
+  },
+  {
+   "spelling": "ye",
+   "volume": "yw",
+   "isHard": true,
+   "parts": {
+    "initial": "y",
+    "medial": "",
+    "final": "e"
+   },
+   "hardReason": "i、u、ü 开头时要写成 y、w"
+  },
+  {
+   "spelling": "yi",
+   "volume": "yw",
+   "isHard": true,
+   "parts": {
+    "initial": "y",
+    "medial": "",
+    "final": "i"
+   },
+   "hardReason": "i、u、ü 开头时要写成 y、w"
+  },
+  {
+   "spelling": "you",
+   "volume": "yw",
+   "isHard": true,
+   "parts": {
+    "initial": "y",
+    "medial": "",
+    "final": "ou"
+   },
+   "hardReason": "i、u、ü 开头时要写成 y、w"
+  },
+  {
+   "spelling": "yu",
+   "volume": "yw",
+   "isHard": true,
+   "parts": {
+    "initial": "y",
+    "medial": "",
+    "final": "u"
+   },
+   "hardReason": "i、u、ü 开头时要写成 y、w"
+  },
+  {
+   "spelling": "yue",
+   "volume": "yw",
+   "isHard": true,
+   "parts": {
+    "initial": "y",
+    "medial": "",
+    "final": "ue"
+   },
+   "hardReason": "i、u、ü 开头时要写成 y、w"
+  },
+  {
+   "spelling": "yun",
+   "volume": "yw",
+   "isHard": true,
+   "parts": {
+    "initial": "y",
+    "medial": "",
+    "final": "un"
+   },
+   "hardReason": "i、u、ü 开头时要写成 y、w"
+  },
+  {
+   "spelling": "zai",
+   "volume": "liangzi-shang",
+   "isHard": false,
+   "parts": {
+    "initial": "z",
+    "medial": "",
+    "final": "ai"
+   }
+  },
+  {
+   "spelling": "zao",
+   "volume": "liangzi-xia",
+   "isHard": false,
+   "parts": {
+    "initial": "z",
+    "medial": "",
+    "final": "ao"
+   }
+  },
+  {
+   "spelling": "zhong",
+   "volume": "biyin-xia",
+   "isHard": false,
+   "parts": {
+    "initial": "zh",
+    "medial": "",
+    "final": "ong"
+   }
+  },
+  {
+   "spelling": "zi",
+   "volume": "base",
+   "isHard": false,
+   "parts": {
+    "initial": "z",
+    "medial": "",
+    "final": "i"
+   }
+  },
+  {
+   "spelling": "zuo",
+   "volume": "sanpin",
+   "isHard": true,
+   "parts": {
+    "initial": "z",
+    "medial": "u",
+    "final": "o"
+   },
+   "hardReason": "声母 + 介音 + 韵母，中间的介音容易漏"
+  }
+ ],
+ "words": [
+  {
+   "text": "大山",
+   "syllables": [
+    "da",
+    "shan"
+   ],
+   "volume": "biyin-shang",
+   "isIdiom": false
+  },
+  {
+   "text": "山上",
+   "syllables": [
+    "shan",
+    "shang"
+   ],
+   "volume": "biyin-shang",
+   "isIdiom": false
+  },
+  {
+   "text": "上山",
+   "syllables": [
+    "shang",
+    "shan"
+   ],
+   "volume": "biyin-shang",
+   "isIdiom": false
+  },
+  {
+   "text": "下山",
+   "syllables": [
+    "xia",
+    "shan"
+   ],
+   "volume": "biyin-shang",
+   "isIdiom": false
+  },
+  {
+   "text": "天上",
+   "syllables": [
+    "tian",
+    "shang"
+   ],
+   "volume": "sanpin",
+   "isIdiom": false
+  },
+  {
+   "text": "大地",
+   "syllables": [
+    "da",
+    "di"
+   ],
+   "volume": "base",
+   "isIdiom": false
+  },
+  {
+   "text": "草地",
+   "syllables": [
+    "cao",
+    "di"
+   ],
+   "volume": "liangzi-xia",
+   "isIdiom": false
+  },
+  {
+   "text": "火山",
+   "syllables": [
+    "huo",
+    "shan"
+   ],
+   "volume": "biyin-shang",
+   "isIdiom": false
+  },
+  {
+   "text": "白云",
+   "syllables": [
+    "bai",
+    "yun"
+   ],
+   "volume": "liangzi-shang",
+   "isIdiom": false
+  },
+  {
+   "text": "太阳",
+   "syllables": [
+    "tai",
+    "yang"
+   ],
+   "volume": "liangzi-shang",
+   "isIdiom": false
+  },
+  {
+   "text": "月亮",
+   "syllables": [
+    "yue",
+    "liang"
+   ],
+   "volume": "yw",
+   "isIdiom": false
+  },
+  {
+   "text": "星星",
+   "syllables": [
+    "xing",
+    "xing"
+   ],
+   "volume": "biyin-xia",
+   "isIdiom": false
+  },
+  {
+   "text": "下雨",
+   "syllables": [
+    "xia",
+    "yu"
+   ],
+   "volume": "sanpin",
+   "isIdiom": false
+  },
+  {
+   "text": "春天",
+   "syllables": [
+    "chun",
+    "tian"
+   ],
+   "volume": "shengzi",
+   "isIdiom": false
+  },
+  {
+   "text": "冬天",
+   "syllables": [
+    "dong",
+    "tian"
+   ],
+   "volume": "biyin-xia",
+   "isIdiom": false
+  },
+  {
+   "text": "早上",
+   "syllables": [
+    "zao",
+    "shang"
+   ],
+   "volume": "liangzi-xia",
+   "isIdiom": false
+  },
+  {
+   "text": "中午",
+   "syllables": [
+    "zhong",
+    "wu"
+   ],
+   "volume": "biyin-xia",
+   "isIdiom": false
+  },
+  {
+   "text": "爸爸",
+   "syllables": [
+    "ba",
+    "ba"
+   ],
+   "volume": "base",
+   "isIdiom": false
+  },
+  {
+   "text": "妈妈",
+   "syllables": [
+    "ma",
+    "ma"
+   ],
+   "volume": "base",
+   "isIdiom": false
+  },
+  {
+   "text": "哥哥",
+   "syllables": [
+    "ge",
+    "ge"
+   ],
+   "volume": "base",
+   "isIdiom": false
+  },
+  {
+   "text": "弟弟",
+   "syllables": [
+    "di",
+    "di"
+   ],
+   "volume": "base",
+   "isIdiom": false
+  },
+  {
+   "text": "大人",
+   "syllables": [
+    "da",
+    "ren"
+   ],
+   "volume": "biyin-shang",
+   "isIdiom": false
+  },
+  {
+   "text": "我们",
+   "syllables": [
+    "wo",
+    "men"
+   ],
+   "volume": "biyin-shang",
+   "isIdiom": false
+  },
+  {
+   "text": "他们",
+   "syllables": [
+    "ta",
+    "men"
+   ],
+   "volume": "biyin-shang",
+   "isIdiom": false
+  },
+  {
+   "text": "你好",
+   "syllables": [
+    "ni",
+    "hao"
+   ],
+   "volume": "base",
+   "isIdiom": false
+  },
+  {
+   "text": "朋友",
+   "syllables": [
+    "peng",
+    "you"
+   ],
+   "volume": "biyin-xia",
+   "isIdiom": false
+  },
+  {
+   "text": "老师",
+   "syllables": [
+    "lao",
+    "shi"
+   ],
+   "volume": "liangzi-xia",
+   "isIdiom": false
+  },
+  {
+   "text": "同学",
+   "syllables": [
+    "tong",
+    "xue"
+   ],
+   "volume": "biyin-xia",
+   "isIdiom": false
+  },
+  {
+   "text": "上学",
+   "syllables": [
+    "shang",
+    "xue"
+   ],
+   "volume": "biyin-xia",
+   "isIdiom": false
+  },
+  {
+   "text": "回家",
+   "syllables": [
+    "hui",
+    "jia"
+   ],
+   "volume": "shengzi",
+   "isIdiom": false
+  },
+  {
+   "text": "门口",
+   "syllables": [
+    "men",
+    "kou"
+   ],
+   "volume": "biyin-shang",
+   "isIdiom": false
+  },
+  {
+   "text": "大门",
+   "syllables": [
+    "da",
+    "men"
+   ],
+   "volume": "biyin-shang",
+   "isIdiom": false
+  },
+  {
+   "text": "开门",
+   "syllables": [
+    "kai",
+    "men"
+   ],
+   "volume": "biyin-shang",
+   "isIdiom": false
+  },
+  {
+   "text": "关门",
+   "syllables": [
+    "guan",
+    "men"
+   ],
+   "volume": "biyin-shang",
+   "isIdiom": false
+  },
+  {
+   "text": "入口",
+   "syllables": [
+    "ru",
+    "kou"
+   ],
+   "volume": "base",
+   "isIdiom": false
+  },
+  {
+   "text": "出口",
+   "syllables": [
+    "chu",
+    "kou"
+   ],
+   "volume": "base",
+   "isIdiom": false
+  },
+  {
+   "text": "本子",
+   "syllables": [
+    "ben",
+    "zi"
+   ],
+   "volume": "biyin-shang",
+   "isIdiom": false
+  },
+  {
+   "text": "文字",
+   "syllables": [
+    "wen",
+    "zi"
+   ],
+   "volume": "yw",
+   "isIdiom": false
+  },
+  {
+   "text": "小手",
+   "syllables": [
+    "xiao",
+    "shou"
+   ],
+   "volume": "sanpin",
+   "isIdiom": false
+  },
+  {
+   "text": "生日",
+   "syllables": [
+    "sheng",
+    "ri"
+   ],
+   "volume": "biyin-xia",
+   "isIdiom": false
+  },
+  {
+   "text": "开心",
+   "syllables": [
+    "kai",
+    "xin"
+   ],
+   "volume": "biyin-shang",
+   "isIdiom": false
+  },
+  {
+   "text": "吃饭",
+   "syllables": [
+    "chi",
+    "fan"
+   ],
+   "volume": "biyin-shang",
+   "isIdiom": false
+  },
+  {
+   "text": "米饭",
+   "syllables": [
+    "mi",
+    "fan"
+   ],
+   "volume": "biyin-shang",
+   "isIdiom": false
+  },
+  {
+   "text": "喝水",
+   "syllables": [
+    "he",
+    "shui"
+   ],
+   "volume": "base",
+   "isIdiom": false
+  },
+  {
+   "text": "牛奶",
+   "syllables": [
+    "niu",
+    "nai"
+   ],
+   "volume": "shengzi",
+   "isIdiom": false
+  },
+  {
+   "text": "水果",
+   "syllables": [
+    "shui",
+    "guo"
+   ],
+   "volume": "shengzi",
+   "isIdiom": false
+  },
+  {
+   "text": "木头",
+   "syllables": [
+    "mu",
+    "tou"
+   ],
+   "volume": "base",
+   "isIdiom": false
+  },
+  {
+   "text": "火车",
+   "syllables": [
+    "huo",
+    "che"
+   ],
+   "volume": "sanpin",
+   "isIdiom": false
+  },
+  {
+   "text": "小鸟",
+   "syllables": [
+    "xiao",
+    "niao"
+   ],
+   "volume": "sanpin",
+   "isIdiom": false
+  },
+  {
+   "text": "小鱼",
+   "syllables": [
+    "xiao",
+    "yu"
+   ],
+   "volume": "sanpin",
+   "isIdiom": false
+  },
+  {
+   "text": "小狗",
+   "syllables": [
+    "xiao",
+    "gou"
+   ],
+   "volume": "sanpin",
+   "isIdiom": false
+  },
+  {
+   "text": "小猫",
+   "syllables": [
+    "xiao",
+    "mao"
+   ],
+   "volume": "sanpin",
+   "isIdiom": false
+  },
+  {
+   "text": "花朵",
+   "syllables": [
+    "hua",
+    "duo"
+   ],
+   "volume": "sanpin",
+   "isIdiom": false
+  },
+  {
+   "text": "绿叶",
+   "syllables": [
+    "lv",
+    "ye"
+   ],
+   "volume": "lv",
+   "isIdiom": false
+  },
+  {
+   "text": "红色",
+   "syllables": [
+    "hong",
+    "se"
+   ],
+   "volume": "biyin-xia",
+   "isIdiom": false
+  },
+  {
+   "text": "白色",
+   "syllables": [
+    "bai",
+    "se"
+   ],
+   "volume": "liangzi-shang",
+   "isIdiom": false
+  },
+  {
+   "text": "人山人海",
+   "syllables": [
+    "ren",
+    "shan",
+    "ren",
+    "hai"
+   ],
+   "volume": "biyin-shang",
+   "isIdiom": true
+  },
+  {
+   "text": "五颜六色",
+   "syllables": [
+    "wu",
+    "yan",
+    "liu",
+    "se"
+   ],
+   "volume": "yw",
+   "isIdiom": true
+  },
+  {
+   "text": "十全十美",
+   "syllables": [
+    "shi",
+    "quan",
+    "shi",
+    "mei"
+   ],
+   "volume": "base",
+   "isIdiom": true
+  },
+  {
+   "text": "七上八下",
+   "syllables": [
+    "qi",
+    "shang",
+    "ba",
+    "xia"
+   ],
+   "volume": "base",
+   "isIdiom": true
+  },
+  {
+   "text": "三心二意",
+   "syllables": [
+    "san",
+    "xin",
+    "er",
+    "yi"
+   ],
+   "volume": "biyin-shang",
+   "isIdiom": true
+  },
+  {
+   "text": "一五一十",
+   "syllables": [
+    "yi",
+    "wu",
+    "yi",
+    "shi"
+   ],
+   "volume": "yw",
+   "isIdiom": true
+  }
+ ],
+ "learned": [
+  "ba",
+  "bai",
+  "bei",
+  "ben",
+  "cao",
+  "che",
+  "chi",
+  "chu",
+  "chun",
+  "da",
+  "dao",
+  "di",
+  "dong",
+  "er",
+  "fan",
+  "fei",
+  "ge",
+  "gou",
+  "guan",
+  "guo",
+  "hai",
+  "hao",
+  "he",
+  "hen",
+  "hong",
+  "hua",
+  "hui",
+  "huo",
+  "jia",
+  "kai",
+  "kan",
+  "kou",
+  "lai",
+  "lao",
+  "le",
+  "li",
+  "liang",
+  "liu",
+  "ma",
+  "mao",
+  "mei",
+  "men",
+  "mi",
+  "mu",
+  "nai",
+  "ni",
+  "niu",
+  "peng",
+  "qi",
+  "qu",
+  "quan",
+  "ren",
+  "ri",
+  "ru",
+  "san",
+  "se",
+  "shan",
+  "shang",
+  "sheng",
+  "shi",
+  "shou",
+  "shui",
+  "ta",
+  "tai",
+  "tian",
+  "tong",
+  "tou",
+  "wen",
+  "wo",
+  "wu",
+  "xia",
+  "xiao",
+  "xin",
+  "xing",
+  "yan",
+  "yang",
+  "ye",
+  "yi",
+  "you",
+  "yu",
+  "yun",
+  "zai",
+  "zao",
+  "zhong",
+  "zi",
+  "zuo"
+ ],
+ "comparisonPassages": [
+  {
+   "id": "p1",
+   "text": "早上太阳出来了，小鸟在天上飞，小鱼在水里游，我和妈妈去上学。",
+   "syllables": [
+    "zao",
+    "shang",
+    "tai",
+    "yang",
+    "chu",
+    "lai",
+    "le",
+    "xiao",
+    "niao",
+    "zai",
+    "tian",
+    "shang",
+    "fei",
+    "xiao",
+    "yu",
+    "zai",
+    "shui",
+    "li",
+    "you",
+    "wo",
+    "he",
+    "ma",
+    "ma",
+    "qu",
+    "shang",
+    "xue"
+   ]
+  },
+  {
+   "id": "p2",
+   "text": "春天来了，草地绿了，花朵开了，我们和老师一起去山上看白云。",
+   "syllables": [
+    "chun",
+    "tian",
+    "lai",
+    "le",
+    "cao",
+    "di",
+    "lv",
+    "le",
+    "hua",
+    "duo",
+    "kai",
+    "le",
+    "wo",
+    "men",
+    "he",
+    "lao",
+    "shi",
+    "yi",
+    "qi",
+    "qu",
+    "shan",
+    "shang",
+    "kan",
+    "bai",
+    "yun"
+   ]
+  },
+  {
+   "id": "p3",
+   "text": "回到家里，爸爸做了米饭，我喝了一杯牛奶，吃了水果，很开心。",
+   "syllables": [
+    "hui",
+    "dao",
+    "jia",
+    "li",
+    "ba",
+    "ba",
+    "zuo",
+    "le",
+    "mi",
+    "fan",
+    "wo",
+    "he",
+    "le",
+    "yi",
+    "bei",
+    "niu",
+    "nai",
+    "chi",
+    "le",
+    "shui",
+    "guo",
+    "hen",
+    "kai",
+    "xin"
+   ]
+  }
+ ]
+}
