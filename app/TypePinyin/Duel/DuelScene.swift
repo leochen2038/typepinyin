@@ -111,9 +111,17 @@ final class DuelScene: SKScene {
         player?.idle(reduced: reducedMotion)
     }
 
+    /// 旅程：比武背景换成这片地区长卷在这一站的局部（nil = 切片的深蓝底）。
+    func setBackdrop(regionId: String?, station: Int) {
+        backdrop = regionId.map { (RegionTheme.of($0), station) }
+        guard size.width > 0 else { return }
+        background.texture = SKTexture(image: Self.renderBackground(size: size, backdrop: backdrop))
+    }
+    private var backdrop: (RegionTheme, Int)?
+
     override func didChangeSize(_ oldSize: CGSize) {
         guard size.width > 0, size.height > 0 else { return }
-        background.texture = SKTexture(image: Self.renderBackground(size: size))
+        background.texture = SKTexture(image: Self.renderBackground(size: size, backdrop: backdrop))
         background.size = size
         background.anchorPoint = .zero
         background.position = .zero
@@ -283,12 +291,16 @@ final class DuelScene: SKScene {
         }
     }
 
-    static func renderBackground(size: CGSize) -> UIImage {
+    static func renderBackground(size: CGSize, backdrop: (RegionTheme, Int)? = nil) -> UIImage {
         let format = UIGraphicsImageRendererFormat()
         format.opaque = true
         return UIGraphicsImageRenderer(size: size, format: format).image { ctx in
             let g = ctx.cgContext
             let w = size.width, h = size.height
+            if let (t, station) = backdrop {
+                drawRegionBackdrop(g, size: size, theme: t, station: station)
+                return
+            }
             g.setFillColor(Palette.uiNavy.cgColor)
             g.fill(CGRect(origin: .zero, size: size))
             let sun = CGPoint(x: w * 0.81, y: h * 0.24)
@@ -309,6 +321,44 @@ final class DuelScene: SKScene {
             g.move(to: CGPoint(x: 0, y: h - groundHeight)); g.addLine(to: CGPoint(x: w, y: h - groundHeight))
             g.strokePath()
         }
+    }
+
+    /// 地区背景：天色、远山、近山（随站点平移一点，像在长卷上往前走）、地面。
+    static func drawRegionBackdrop(_ g: CGContext, size: CGSize, theme t: RegionTheme, station: Int) {
+        let w = size.width, h = size.height
+        g.setFillColor(t.ui(t.sky).cgColor)
+        g.fill(CGRect(origin: .zero, size: size))
+        g.setFillColor(Palette.uiGold.withAlphaComponent(0.85).cgColor)
+        g.fillEllipse(in: CGRect(x: w * 0.78 - 34, y: h * 0.18 - 34, width: 68, height: 68))
+        let groundHeight = Self.groundHeight(for: h)
+        func hills(_ color: UInt32, base: CGFloat, amp: CGFloat, period: CGFloat, shift: CGFloat) {
+            let path = CGMutablePath()
+            path.move(to: CGPoint(x: 0, y: h))
+            var x: CGFloat = 0
+            while x <= w + 8 {
+                let y = base - amp * (0.6 + 0.4 * sin((x + shift) / period)) * abs(sin((x + shift) / (period * 1.7)))
+                path.addLine(to: CGPoint(x: x, y: y))
+                x += 6
+            }
+            path.addLine(to: CGPoint(x: w, y: h))
+            path.closeSubpath()
+            g.addPath(path)
+            g.setFillColor(t.ui(color).cgColor)
+            g.fillPath()
+            g.addPath(path)
+            g.setStrokeColor(Palette.uiInk.cgColor)
+            g.setLineWidth(2.5)
+            g.strokePath()
+        }
+        let s = CGFloat(station) * 37
+        hills(t.farHill, base: h * 0.58, amp: h * 0.28, period: 46, shift: s * 0.5)
+        hills(t.nearHill, base: h * 0.78, amp: h * 0.2, period: 31, shift: s)
+        g.setFillColor(t.ui(t.road).cgColor)
+        g.fill(CGRect(x: 0, y: h - groundHeight, width: w, height: groundHeight))
+        g.setStrokeColor(Palette.uiInk.cgColor)
+        g.setLineWidth(3)
+        g.move(to: CGPoint(x: 0, y: h - groundHeight)); g.addLine(to: CGPoint(x: w, y: h - groundHeight))
+        g.strokePath()
     }
 
     // MARK: - 演出

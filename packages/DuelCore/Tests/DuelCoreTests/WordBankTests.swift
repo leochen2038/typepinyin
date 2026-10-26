@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import DuelCore
+import LearningCore
 
 @Suite struct WordBankTests {
     @Test func loadsFixture() {
@@ -27,13 +28,17 @@ import Testing
         #expect(w.letterOffset(ofSyllable: 1) == 6)
     }
 
-    /// 打包进 App 的正式词表也要通过校验。
-    @Test func bundledAppWordListIsValid() throws {
+    /// 打包进 App 的内容包，转成比武词表后也要通过校验（每个词的字数 = 拼音数、拼音都在 404 个音节里）。
+    @Test func bundledContentIsValidForDuels() throws {
         let here = URL(fileURLWithPath: #filePath)
-        let url = here.deletingLastPathComponent().appendingPathComponent("../../../../app/TypePinyin/Resources/duel-words.json").standardized
-        let bank = try WordBank.load(from: Data(contentsOf: url))
-        #expect(bank.words.count >= 50)
-        #expect(bank.idioms.count >= 6)
-        for s in bank.learned { #expect(bank.syllableTable[s] != nil) }
+        let url = here.deletingLastPathComponent().appendingPathComponent("../../../../app/TypePinyin/Resources/content.json").standardized
+        let c = try LearningContent.load(from: Data(contentsOf: url))
+        let syl = c.syllables.map { Syllable(spelling: $0.spelling, volume: $0.volume, isHard: $0.hardReason != nil,
+                                             parts: .init(initial: $0.parts.initial, medial: $0.parts.medial, final: $0.parts.final)) }
+        let words = c.words.map { Word(text: $0.text, syllables: $0.syllables, volume: $0.volume, isIdiom: $0.isIdiom) }
+        let bank = WordBank(syllables: syl, words: words, learned: [])
+        try bank.validate()
+        #expect(bank.words.count >= 1000)
+        #expect(bank.idioms.count >= 100)
     }
 }

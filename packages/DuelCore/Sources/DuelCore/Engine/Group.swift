@@ -88,7 +88,7 @@ extension DuelEngine {
         guard !awaitingReveal else { return }
         for i in foes.indices where foes[i].pressureProgress(at: clock) >= 1 {
             let dmg = foes[i].tier.hit
-            player.hp = max(0, player.hp - dmg)
+            _ = hurtPlayer(dmg)
             emit(.foeAttacked(id: foes[i].id, damage: dmg))
             breakCombo()
             if player.hp <= 0 { finish(won: false); return }

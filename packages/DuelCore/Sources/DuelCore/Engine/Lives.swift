@@ -7,7 +7,7 @@ extension DuelEngine {
     var livesOn: Bool { !groupMode && tuning.movesPerDuel == 0 }
 
     func startLives() {
-        let n = livesOn ? min(5, max(1, tuning.foeLives)) : 1
+        let n = livesOn ? min(5, max(1, setup.lives ?? tuning.foeLives)) : 1
         opponent.maxLives = n
         opponent.lives = n
         foeDownUntil = 0
@@ -15,8 +15,9 @@ extension DuelEngine {
 
     /// 一条命的血：整场的血平分到每条命上，一场的长短和一条命时差不多。
     func perLifeHP(_ hp: Int) -> Int {
-        guard livesOn, tuning.foeLives > 1 else { return hp }
-        return max(1, Int((Double(hp) / Double(min(5, tuning.foeLives))).rounded()))
+        let lives = setup.lives ?? tuning.foeLives
+        guard livesOn, lives > 1 else { return hp }
+        return max(1, Int((Double(hp) / Double(min(5, lives))).rounded()))
     }
 
     /// 蓄力时长的倍数：丢了几条命就快几次。

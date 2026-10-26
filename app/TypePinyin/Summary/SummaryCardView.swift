@@ -6,6 +6,10 @@ struct SummaryCardView: View {
     let s: DuelSummary
     let foe: String
     var fasterBy: Double? = nil
+    /// 旅程多出来的收获（「你已经能打出 N 个常用字」等），排在前面。
+    var extraGains: [String] = []
+    /// 旅程的按钮（空 = 「再来一场」）。
+    var actions: [DuelController.SummaryAction] = []
     let onAgain: () -> Void
 
     var body: some View {
@@ -22,6 +26,7 @@ struct SummaryCardView: View {
                     .overlay(Rectangle().stroke(Palette.ink, lineWidth: 2))
             }
             VStack(alignment: .leading, spacing: 8) {
+                ForEach(extraGains, id: \.self) { gain($0) }
                 if s.goldMoves > 0 { gain("打出 \(s.goldMoves) 招完美") }
                 if s.won { gain(String(format: "用时 %d:%02d", Int(s.durationSeconds) / 60, Int(s.durationSeconds) % 60)) }
                 if s.charactersTyped > 0 { gain("打出了 \(s.charactersTyped) 个字") }
@@ -29,14 +34,13 @@ struct SummaryCardView: View {
                 if s.parries > 0 { gain("弹反 \(s.parries) 次") }
                 if !s.newMoves.isEmpty { gain("学会新招：\(s.newMoves.joined(separator: "、"))") }
             }
-            Button(action: onAgain) {
-                Text("再来一场").font(Fonts.display(24)).frame(maxWidth: .infinity).frame(height: 52)
-                    .background(Palette.gold).foregroundStyle(Palette.ink)
-                    .overlay(Rectangle().stroke(Palette.ink, lineWidth: 3))
-                    .compositingGroup().shadow(color: Palette.ink, radius: 0, x: 3, y: 3)
+            if actions.isEmpty {
+                bigButton("再来一场", primary: true, action: onAgain).accessibilityIdentifier("again")
+            } else {
+                HStack(spacing: 12) {
+                    ForEach(actions) { a in bigButton(a.label, primary: a.primary, action: a.action).accessibilityIdentifier(a.label) }
+                }
             }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("again")
         }
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -45,6 +49,16 @@ struct SummaryCardView: View {
         .compositingGroup()
         .shadow(color: Palette.ink, radius: 0, x: 6, y: 6)
         .padding(.horizontal, 16)
+    }
+
+    private func bigButton(_ label: String, primary: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label).font(Fonts.display(24)).frame(maxWidth: .infinity).frame(height: 52)
+                .background(primary ? Palette.gold : Color.white).foregroundStyle(Palette.ink)
+                .overlay(Rectangle().stroke(Palette.ink, lineWidth: 3))
+                .compositingGroup().shadow(color: Palette.ink, radius: 0, x: 3, y: 3)
+        }
+        .buttonStyle(.plain)
     }
 
     private func gain(_ text: String) -> some View {

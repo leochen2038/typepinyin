@@ -7,6 +7,10 @@ options:
 packages:
   DuelCore:
     path: ../packages/DuelCore
+  LearningCore:
+    path: ../packages/LearningCore
+  ProgressStore:
+    path: ../packages/ProgressStore
 settings:
   base:
     SWIFT_VERSION: "6.0"
@@ -20,6 +24,8 @@ targets:
       - path: TypePinyin
     dependencies:
       - package: DuelCore
+      - package: LearningCore
+      - package: ProgressStore
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.leochen.typepinyin

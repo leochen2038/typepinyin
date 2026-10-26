@@ -1,4 +1,5 @@
 import Foundation
+import LearningCore
 
 /// 比武规则引擎。不读系统时间：所有时间由调用方传入（单调时钟秒数）。
 /// 每帧：先把排队的按键按 commitAt 依次 `handle`，再 `advance(to:)`。
@@ -82,17 +83,26 @@ public final class DuelEngine {
     public internal(set) var lastStruck: [Int] = []
     public internal(set) var lastDowned: [Int] = []
     public internal(set) var lastJoined: [Int] = []
+    /// 旅程：单场设置、出牌来源、这一场按音节交回的打字结果。
+    public let setup: DuelSetup
+    public let source: CardSource?
+    public internal(set) var attempts: [Attempt] = []
+    var track = SyllableTrack(count: 0)
+    /// 还没锁定目标时就亮了提示（首字母），锁定后记到第一个音节上。
+    var hintPendingFirst = false
 
     var events: [DuelEvent] = []
 
     public init(bank: WordBank, tuning: Tuning = .standard, opponent: Opponent, seed: UInt64 = 1,
-                features: Features = .all, learned: Set<String>? = nil) {
+                features: Features = .all, learned: Set<String>? = nil, setup: DuelSetup = DuelSetup(), source: CardSource? = nil) {
+        self.setup = setup
+        self.source = source
         self.bank = bank
         self.tuning = tuning
         self.features = features
         self.syllableTable = bank.syllableTable
         self.rng = SeededRandom(seed: seed)
-        self.learner = LearnerState(learned: learned ?? Set(bank.learned))
+        self.learner = LearnerState(learned: setup.learned ?? learned ?? Set(bank.learned))
         self.player = PlayerState(hp: tuning.playerMaxHP)
         self.opponent = OpponentState(name: opponent.name, title: opponent.title, maxHP: 1, hp: 1, nextAttackAt: .infinity)
     }
@@ -108,8 +118,12 @@ public final class DuelEngine {
         clock = 0
         phase = .fighting
         player = PlayerState(hp: tuning.playerMaxHP)
+        if let s = setup.secondsPerLetter { player.secondsPerLetter = s }
+        attempts = []
+        track = SyllableTrack(count: 0)
+        hintPendingFirst = false
         startLives()
-        let hp = perLifeHP(Self.opponentHP(secondsPerLetter: player.secondsPerLetter, tuning: tuning))
+        let hp = perLifeHP(Self.opponentHP(secondsPerLetter: player.secondsPerLetter, tuning: tuning, targetSeconds: setup.targetSeconds))
         opponent.maxHP = hp
         opponent.hp = hp
         opponent.incoming = nil

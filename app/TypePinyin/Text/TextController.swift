@@ -30,12 +30,19 @@ final class TextController: KeyTarget {
         var letters: [Character] { Array(syllables.joined()) }
     }
 
-    static let passages: [Passage] = {
-        struct File: Decodable { let passages: [Passage] }
-        guard let url = Bundle.main.url(forResource: "text-passages", withExtension: "json"),
-              let data = try? Data(contentsOf: url),
-              let f = try? JSONDecoder().decode(File.self, from: data) else { return [] }
-        return f.passages
+    /// 试玩用的篇目：短句是内容包里的第一段奇遇，文章是内容包里的「下一篇」。
+    @MainActor static let passages: [Passage] = {
+        let c = AppResources.content
+        var out: [Passage] = []
+        if let e = c.encounters.first {
+            out.append(Passage(id: e.id, kind: "encounter", title: "奇遇 · \(e.title)", intro: e.intro, source: e.source,
+                               reply: e.reply, text: e.text, syllables: e.syllables))
+        }
+        if let a = c.articles.first {
+            out.append(Passage(id: a.id, kind: "article", title: a.title ?? "下一篇", intro: a.intro ?? "", source: a.source,
+                               reply: "", text: a.text, syllables: a.syllables))
+        }
+        return out
     }()
 
     static let punctuation: Set<Character> = ["，", "。", "！", "？", "、", "；", "："]
@@ -129,11 +136,19 @@ final class TextController: KeyTarget {
 
     init(c: DuelController) { self.c = c }
 
+    /// 旅程的奇遇：打完回调（交回每句干不干净，用来记学习）。
+    @ObservationIgnored var onFinish: ((TextController) -> Void)?
+    /// 每句打完时：没打错、没看提示。
+    private(set) var sentenceClean: [Bool] = []
+    /// 旅程给的篇目（nil = 按「打什么」从内容包取）。
+    @ObservationIgnored var given: Passage?
+
     // MARK: 开始
 
     func start(mode: Int) {
         let kind = mode == 2 ? "article" : "encounter"
-        passage = Self.passages.first { $0.kind == kind }
+        passage = given ?? Self.passages.first { $0.kind == kind }
+        sentenceClean = []
         sentences = passage.map(Self.sentences(of:)) ?? []
         index = 0; typed = 0; perfects = 0; reviews = []; flipFrom = nil
         startedAt = nil; finishedAt = nil
@@ -242,6 +257,7 @@ final class TextController: KeyTarget {
         guard let s = current else { return }
         let perLetter = (t - sentenceStart) / Double(max(1, s.letters.count))
         flashPerfect = sentenceMistakes == 0 && !sentenceHinted && perLetter <= c.tuning.goldSecondsPerLetter
+        sentenceClean.append(sentenceMistakes == 0 && !sentenceHinted)
         if flashPerfect { perfects += 1 }
         let last = index == sentences.count - 1
         if withReview { review(s, perfect: flashPerfect, last: last, at: t); return }
@@ -273,6 +289,7 @@ final class TextController: KeyTarget {
             finishedAt = t
             c.sounds.play(.win)
             if isArticle, let id = passage?.id { UserDefaults.standard.set(cpm, forKey: "ghostCPM.\(id)") }
+            onFinish?(self)
             return
         }
         flipFrom = index                                  // 翻页钟：刚打完的这句从这一刻翻下去

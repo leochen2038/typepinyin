@@ -7,9 +7,19 @@ struct TextScreen: View {
     @State private var t: TextController
     @State private var showPanel = false
 
-    init(c: DuelController) {
+    /// 旅程的奇遇：篇目和打完后的按钮。
+    var encounter: TextController.Passage?
+    var onEncounterDone: (() -> Void)?
+
+    init(c: DuelController, encounter: TextController.Passage? = nil, onFinish: ((TextController) -> Void)? = nil,
+         onEncounterDone: (() -> Void)? = nil) {
         self.c = c
-        _t = State(initialValue: TextController(c: c))
+        self.encounter = encounter
+        self.onEncounterDone = onEncounterDone
+        let tc = TextController(c: c)
+        tc.given = encounter
+        tc.onFinish = onFinish
+        _t = State(initialValue: tc)
     }
 
     var body: some View {
@@ -31,9 +41,9 @@ struct TextScreen: View {
         .background(Palette.mist)
         .overlay { if t.finished { result } }
         .sheet(isPresented: $showPanel) { TuningPanelView(c: c) }
-        .onAppear { c.suspend(); t.start(mode: c.tuning.textMode) }
+        .onAppear { c.suspend(); t.start(mode: encounter != nil ? 1 : c.tuning.textMode) }
         .onDisappear { t.stop() }
-        .onChange(of: c.tuning.textMode) { _, m in if m != 0 { t.start(mode: m) } }
+        .onChange(of: c.tuning.textMode) { _, m in if m != 0 && encounter == nil { t.start(mode: m) } }
     }
 
     private var header: some View {
@@ -86,9 +96,9 @@ struct TextScreen: View {
                 Text(String(format: "用时 %d:%02d　打了 %d 个字", Int(t.elapsed) / 60, Int(t.elapsed) % 60, t.totalChars))
                     .font(.system(size: 15, weight: .bold))
                 Button {
-                    t.start(mode: c.tuning.textMode)
+                    if let done = onEncounterDone { done() } else { t.start(mode: c.tuning.textMode) }
                 } label: {
-                    Text("再来一次").font(Fonts.display(20)).frame(maxWidth: .infinity).padding(.vertical, 10)
+                    Text(onEncounterDone != nil ? "接着走" : "再来一次").font(Fonts.display(20)).frame(maxWidth: .infinity).padding(.vertical, 10)
                         .background(Palette.gold).overlay(Rectangle().stroke(Palette.ink, lineWidth: 3))
                 }
                 .buttonStyle(.plain)

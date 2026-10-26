@@ -23,10 +23,19 @@ extension DuelEngine {
         let ok: (Word) -> Bool = { !taken.contains($0.firstLetter) && !table.contains($0.text) }
         defer { dealCount += 1; nextCardId += 1 }
 
+        if forceFinisher || (qiOn && finisherPending), let src = source, let (idiom, rank) = src.nextIdiom() {
+            finisherPending = false
+            return MoveCard(id: nextCardId, word: idiom, dealtAt: clock, isFinisher: true, rank: rank)
+        }
         if forceFinisher || (qiOn && finisherPending),
            let idiom = bank.idioms.shuffled(using: &rng).first(where: ok) ?? (forceFinisher ? bank.idioms.first : nil) {
             finisherPending = false
             return MoveCard(id: nextCardId, word: idiom, dealtAt: clock, isFinisher: true, rank: rank(for: idiom))
+        }
+
+        if let src = source {
+            let (w, rank) = src.nextCard(avoidingFirstLetters: taken, avoidingTexts: table)
+            return MoveCard(id: nextCardId, word: w, dealtAt: clock, rank: rank)
         }
 
         if features.contains(.teaching) {

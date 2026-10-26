@@ -1,3 +1,4 @@
+import LearningCore
 import SwiftUI
 
 /// 秘籍重数的爆字母效果（试看版）：主题跟着卷走（每卷一种粒子和一种飞法，取自这片地区的景色），档次跟着重数走。
@@ -16,7 +17,7 @@ enum RankFx {
         let accent: Color
     }
 
-    static let order = ["base", "liangzi-shang", "liangzi-xia", "biyin-shang", "biyin-xia", "yw", "shengzi", "lv", "sanpin"]
+    static let order = ["base", "liangzi-shang", "liangzi-xia", "biyin-shang", "biyin-xia", "yw", "shengzi", "lv", "sanpin-shang", "sanpin-xia"]
 
     static let themes: [String: Theme] = [
         "base": Theme(name: "十里坡 · 彩纸", kind: .confetti, colors: Confetti.paper, accent: Palette.gold),
@@ -34,29 +35,16 @@ enum RankFx {
                          colors: [Color(hex: 0xA8D86E), Color(hex: 0x7DBB4A), Color(hex: 0xC9E89A)], accent: Color(hex: 0x5E9E34)),
         "lv": Theme(name: "绿泉居 · 泉水", kind: .spring,
                     colors: [Color(hex: 0x3FBF8F), Color(hex: 0x8FE3C8), Color(hex: 0x2A9D8F)], accent: Color(hex: 0x2A9D8F)),
-        "sanpin": Theme(name: "小桥乡 · 桃花", kind: .peach,
-                        colors: [Color(hex: 0xFF9CC0), Color(hex: 0xFFC4D8), Color(hex: 0xFF7AA8)], accent: Color(hex: 0xFF5C93)),
+        "sanpin-shang": Theme(name: "小桥乡 · 桃花", kind: .peach,
+                              colors: [Color(hex: 0xFF9CC0), Color(hex: 0xFFC4D8), Color(hex: 0xFF7AA8)], accent: Color(hex: 0xFF5C93)),
+        "sanpin-xia": Theme(name: "黄花关 · 桃花", kind: .peach,
+                            colors: [Color(hex: 0xFF9CC0), Color(hex: 0xFFC4D8), Color(hex: 0xFF7AA8)], accent: Color(hex: 0xFF5C93)),
     ]
 
     static func theme(_ volume: String) -> Theme { themes[volume] ?? themes["base"]! }
 
-    /// 一个音节属于哪一卷：词表里有就用词表的，没有（比如诗文里的字）就按同一套规则现算。
-    @MainActor static func volume(of s: String) -> String {
-        if let v = AppResources.bank.syllableTable[s]?.volume { return v }
-        guard let first = s.first else { return "base" }
-        let initials = ["zh", "ch", "sh", "b", "p", "m", "f", "d", "t", "n", "l", "g", "k", "h", "j", "q", "x", "r", "z", "c", "s", "y", "w"]
-        let ini = initials.first { s.hasPrefix($0) && s.count > $0.count } ?? ""
-        let rest = String(s.dropFirst(ini.count))
-        if first == "y" || first == "w" { return "yw" }
-        if s.contains("v") || (["j", "q", "x"].contains(ini) && rest.hasPrefix("u")) { return "lv" }
-        if ["iu", "ui", "un"].contains(rest) { return "shengzi" }
-        if !ini.isEmpty, ["iang", "iong", "iao", "ian", "ia", "ie", "uang", "uai", "uan", "ua", "uo"].contains(rest) { return "sanpin" }
-        if ["an", "en", "in"].contains(rest) { return "biyin-shang" }
-        if ["ang", "eng", "ing", "ong"].contains(rest) { return "biyin-xia" }
-        if ["ai", "ei"].contains(rest) { return "liangzi-shang" }
-        if ["ao", "ou"].contains(rest) { return "liangzi-xia" }
-        return "base"
-    }
+    /// 一个音节属于哪一卷（任何音节都能归，规则在 LearningCore）。
+    @MainActor static func volume(of s: String) -> String { AppResources.content.volume(of: s) }
 
     // MARK: 符号
 

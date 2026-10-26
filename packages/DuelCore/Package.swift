@@ -7,8 +7,11 @@ let package = Package(
     products: [
         .library(name: "DuelCore", targets: ["DuelCore"]),
     ],
+    dependencies: [
+        .package(path: "../LearningCore"),
+    ],
     targets: [
-        .target(name: "DuelCore"),
+        .target(name: "DuelCore", dependencies: ["LearningCore"]),
         .testTarget(
             name: "DuelCoreTests",
             dependencies: ["DuelCore"],

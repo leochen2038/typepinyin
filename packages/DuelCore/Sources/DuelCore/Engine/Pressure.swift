@@ -5,7 +5,7 @@ extension DuelEngine {
     var singleCard: Bool { tuning.cardsOnTable <= 1 }
 
     /// 掌门蓄力打不断：对手 3 条命以上、开关打开时。
-    var bossMode: Bool { tuning.bossPressure && singleCard && livesOn && opponent.maxLives >= 3 }
+    var bossMode: Bool { (setup.bossPressure ?? tuning.bossPressure) && singleCard && livesOn && opponent.maxLives >= 3 }
 
     /// 掌门一轮蓄力：bossCycleCards 张牌的时间（一张按 6 个字母、玩家的手速，再加 0.8 秒看牌），丢一条命快一次。
     var bossCycleSeconds: Double {
@@ -46,10 +46,10 @@ extension DuelEngine {
         guard singleCard, let s = opponent.pressureStart, clock >= s + opponent.pressureDuration else { return }
         if bossMode && awaitingReveal { return }                    // 演回顾时掌门也停着
         let dmg = bossMode ? tuning.bossHit : tuning.incomingDamage
-        player.hp = max(0, player.hp - dmg)
+        let dead = hurtPlayer(dmg)
         emit(.hitByIncoming(damage: dmg))
         breakCombo()
-        if player.hp <= 0 {
+        if dead {
             opponent.pressureStart = nil
             finish(won: false)
             return

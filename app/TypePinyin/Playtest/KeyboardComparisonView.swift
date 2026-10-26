@@ -15,7 +15,7 @@ struct KeyboardComparisonView: View {
     enum Stage { case ready, system, custom, done }
     struct Result { var seconds: Double; var cpm: Double; var mistakes: Int }
 
-    private var passages: [WordBank.Passage] { AppResources.bank.comparisonPassages }
+    private var passages: [WordBank.Passage] { AppResources.journeyBank.comparisonPassages }
     private var passage: WordBank.Passage { passages[passageIndex % max(1, passages.count)] }
 
     var body: some View {
@@ -133,7 +133,7 @@ struct ComparisonTyping: View {
 
     private func finish() {
         let secs = max(0.01, model.elapsed)
-        let chars = Double(AppResources.bank.comparisonPassages.first { $0.syllables.joined() == expected }?.syllables.count ?? expected.count)
+        let chars = Double(AppResources.journeyBank.comparisonPassages.first { $0.syllables.joined() == expected }?.syllables.count ?? expected.count)
         onDone(.init(seconds: secs, cpm: chars / secs * 60, mistakes: model.mistakes))
     }
 }

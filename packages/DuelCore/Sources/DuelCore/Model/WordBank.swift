@@ -1,11 +1,17 @@
 import Foundation
 
-/// 片段内置的测试词表（duel-words.json）。
+/// 比武用的词表（App 里由内容包转成；测试用 Fixtures/test-words.json）。
 public struct WordBank: Codable, Sendable {
     public struct Passage: Codable, Sendable, Hashable {
         public var id: String
         public var text: String
         public var syllables: [String]
+
+        public init(id: String, text: String, syllables: [String]) {
+            self.id = id
+            self.text = text
+            self.syllables = syllables
+        }
     }
 
     public var syllables: [Syllable]

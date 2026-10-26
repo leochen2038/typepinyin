@@ -38,7 +38,7 @@
  "bossPushBack": 0.2,
  "bossCycleCards": 3,
  "bossHit": 8,
- "textMode": 0,
+ "textMode": 3,
  "textStyle": 2,
  "heavyLetters": 10,
  "mediumLetters": 7,
@@ -66,5 +66,43 @@
  "moveDots": true,
  "rankFx": -1,
  "rankFxTheme": "",
- "slashMinGap": 0.075
+ "slashMinGap": 0.075,
+ "learning": {
+  "firstFluentStart": 1.0,
+  "fluentDays": 2,
+  "fluentRecent": 3,
+  "fluentStart": 2.0,
+  "masterRecent": 5,
+  "masterStart": 0.8,
+  "replayOffsets": [
+   2,
+   5
+  ],
+  "reviewDays": [
+   1,
+   3,
+   7,
+   16,
+   35
+  ],
+  "mixKnown": 0.35,
+  "mixNew": 0.25,
+  "mixReview": 0.3,
+  "mixFiller": 0.1,
+  "newPerDuel": 3,
+  "newGap": 2,
+  "newPerDay": 8,
+  "afterMissKnown": 2,
+  "successTarget": 0.85,
+  "successWindow": 20,
+  "recentWords": 14,
+  "probeFamilies": 3,
+  "probePerFamily": 4,
+  "probeFocusMisses": 2,
+  "probeFocusExtra": 3,
+  "speedWeight": 0.2,
+  "openingBattles": 3,
+  "openingTargetSeconds": 40,
+  "openingMinHP": 1
+ }
 }

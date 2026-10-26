@@ -1,7 +1,7 @@
 import UIKit
 
 /// 按键声和按键震动。按键声用系统提供的键盘音（跟随用户在设置里的「键盘按键声」开关），
-/// 只有在自定义键盘作为输入视图显示时才会响，所以键盘挂在隐藏焦点视图的 inputView 上（research R3）。
+/// 只有在自定义键盘作为输入视图显示时才会响，所以键盘挂在隐藏焦点视图的 inputView 上。
 @MainActor
 final class KeyFeedback {
     private let tap = UIImpactFeedbackGenerator(style: .light)

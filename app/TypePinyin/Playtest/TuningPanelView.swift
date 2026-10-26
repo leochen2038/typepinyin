@@ -4,6 +4,8 @@ import SwiftUI
 /// 隐藏的调参面板：所有比武数值都能改，下一场生效（键盘相关的立即生效），重启后保留。
 struct TuningPanelView: View {
     let c: DuelController
+    @State private var confirmReset = false
+    @State private var dayTick = 0
     @State private var t: Tuning
     @Environment(\.dismiss) private var dismiss
 
@@ -49,6 +51,31 @@ struct TuningPanelView: View {
         D(label: "对手蓄力：基础秒数", kp: \.pressureBaseSeconds, step: 0.5, range: 0...6),
         D(label: "对手蓄力：最短秒数", kp: \.pressureMinSeconds, step: 0.5, range: 1...10),
     ]
+    private let learnD: [D] = [
+        D(label: "第一次就熟练：上手不到（秒）", kp: \.learning.firstFluentStart, step: 0.1, range: 0.3...3),
+        D(label: "熟练：上手不到（秒）", kp: \.learning.fluentStart, step: 0.1, range: 0.5...5),
+        D(label: "精通：上手不到（秒）", kp: \.learning.masterStart, step: 0.05, range: 0.3...2),
+        D(label: "出字：本卷已会", kp: \.learning.mixKnown, step: 0.05, range: 0...1),
+        D(label: "出字：本卷没会", kp: \.learning.mixNew, step: 0.05, range: 0...1),
+        D(label: "出字：复习", kp: \.learning.mixReview, step: 0.05, range: 0...1),
+        D(label: "出字：垫底", kp: \.learning.mixFiller, step: 0.05, range: 0...1),
+        D(label: "打对率目标", kp: \.learning.successTarget, step: 0.05, range: 0.5...1),
+        D(label: "手速滑动权重", kp: \.learning.speedWeight, step: 0.05, range: 0.05...1),
+        D(label: "初入江湖每场目标（秒）", kp: \.learning.openingTargetSeconds, step: 5, range: 15...120),
+    ]
+    private let learnI: [I] = [
+        I(label: "熟练要几个不同的日子", kp: \.learning.fluentDays, range: 1...5),
+        I(label: "熟练看最近几次", kp: \.learning.fluentRecent, range: 1...10),
+        I(label: "精通看最近几次", kp: \.learning.masterRecent, range: 1...10),
+        I(label: "每场最多几个新音节", kp: \.learning.newPerDuel, range: 0...8),
+        I(label: "新音节后至少隔几张", kp: \.learning.newGap, range: 0...5),
+        I(label: "每天最多新学几个", kp: \.learning.newPerDay, range: 0...30),
+        I(label: "刚错过后几张出会的", kp: \.learning.afterMissKnown, range: 0...5),
+        I(label: "最近几个词不重复", kp: \.learning.recentWords, range: 0...40),
+        I(label: "摸底探几族", kp: \.learning.probeFamilies, range: 0...6),
+        I(label: "摸底每族探几个", kp: \.learning.probePerFamily, range: 1...8),
+        I(label: "初入江湖几场", kp: \.learning.openingBattles, range: 1...5),
+    ]
     private let ints: [I] = [
         I(label: "被来招打中掉血", kp: \.incomingDamage, range: 0...50),
         I(label: "已学会的打错掉血", kp: \.mistakeDamage, range: 0...20),
@@ -77,8 +104,9 @@ struct TuningPanelView: View {
                 }
                 Section {
                     Picker("模式", selection: $t.textMode) {
+                        Text("旅程").tag(3)
                         Text("比武").tag(0)
-                        Text("短句（奇遇 · 代写家书）").tag(1)
+                        Text("短句（奇遇 · 题壁诗）").tag(1)
                         Text("文章（下一篇）").tag(2)
                     }
                     .pickerStyle(.menu)
@@ -172,9 +200,32 @@ struct TuningPanelView: View {
                 Section("旧玩法") {
                     Toggle("玩家气条（攒满出成语必杀牌）", isOn: $t.qiBar)
                 }
+                Section {
+                    Button("日子 +1（现在偏移 \(DayClock.offset) 天）") { DayClock.advanceOneDay(); dayTick += 1 }
+                    Toggle("跳过旅程动画", isOn: Binding(get: { JourneyFlags.fast }, set: { JourneyFlags.fast = $0 }))
+                    Button("清空进度", role: .destructive) { confirmReset = true }
+                } header: {
+                    Text("旅程（试玩）")
+                } footer: {
+                    Text("清空进度会删掉这台手机上的全部旅程进度（学会的音节、秘籍、走到哪），下次打开从初入江湖开始，用来换人试玩。日子 +1 用来试熟练、复习和每天新学的上限。")
+                }
+                .id(dayTick)
+                .confirmationDialog("清空这台手机上的全部旅程进度？", isPresented: $confirmReset, titleVisibility: .visible) {
+                    Button("清空", role: .destructive) { c.journey?.resetProgress(); dismiss() }
+                }
                 Section("连招") { ForEach(combo, id: \.label) { row($0) } }
                 Section("来招") { ForEach(incoming, id: \.label) { row($0) } }
                 Section("伤害、蓄势") { ForEach(damage, id: \.label) { row($0) } }
+                Section {
+                    ForEach(learnD, id: \.label) { row($0) }
+                    ForEach(learnI, id: \.label) { f in
+                        Stepper("\(f.label)：\(t[keyPath: f.kp])", value: Binding(get: { t[keyPath: f.kp] }, set: { t[keyPath: f.kp] = $0 }), in: f.range)
+                    }
+                } header: {
+                    Text("学习（旅程里生效）")
+                } footer: {
+                    Text("熟练度门槛、出字配比和护栏、摸底、手速、初入江湖。复习间隔 1/3/7/16/35 天先写在默认配置里。")
+                }
                 Section("整数") {
                     ForEach(ints, id: \.label) { f in
                         Stepper("\(f.label)：\(t[keyPath: f.kp])", value: Binding(get: { t[keyPath: f.kp] }, set: { t[keyPath: f.kp] = $0 }), in: f.range)

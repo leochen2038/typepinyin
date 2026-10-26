@@ -4,6 +4,8 @@ import SwiftUI
 /// 比武界面，自上而下：状态栏、战斗区、招式牌、键盘（放在界面里，主角的手才能伸到键上）。
 struct DuelScreen: View {
     @State var c: DuelController
+    /// 旅程：开打前先排好这一场（设好 c.plan）。
+    var prepare: (() -> Void)? = nil
     @State private var showPanel = false
     @State private var cardFrames: [Int: CGRect] = [:]
     @State private var battleFrame: CGRect = .zero
@@ -39,6 +41,10 @@ struct DuelScreen: View {
                     FinaleBanner().frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
                 NearMissLayer(trigger: c.nearMissToast)
+                if let t = c.tip {
+                    TipBanner(text: t).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom).padding(.bottom, 14)
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                }
             }
             .frame(maxHeight: .infinity)
             .clipped()
@@ -66,7 +72,7 @@ struct DuelScreen: View {
             if let s = c.summary {
                 ZStack {
                     Color.black.opacity(0.3).ignoresSafeArea(edges: .top)
-                    SummaryCardView(s: s, foe: c.foeName, fasterBy: c.fasterBy) { c.restart() }
+                    SummaryCardView(s: s, foe: c.foeName, fasterBy: c.fasterBy, extraGains: c.summaryGains, actions: c.summaryActions) { c.restart() }
                 }
                 .transition(.opacity)
             }
@@ -86,11 +92,13 @@ struct DuelScreen: View {
             }
         }
         .animation(.spring(duration: 0.3), value: c.finaleBanner)
+        .animation(.easeOut(duration: 0.25), value: c.tip)
         .animation(.spring(duration: 0.18, bounce: 0.4), value: c.killBanner)
         .animation(.easeOut(duration: 0.25), value: c.summary != nil)
         .sheet(isPresented: $showPanel) { TuningPanelView(c: c) }
         .onAppear {
             c.scene.reducedMotion = reduceMotion
+            if let prepare { prepare() } else { c.plan = nil }
             c.start()
         }
         .modifier(Lifecycle(c: c))

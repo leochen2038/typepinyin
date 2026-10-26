@@ -7,6 +7,7 @@ extension DuelEngine {
         let l = Array(word.letters)
         guard typed < l.count, currentHint != l[typed] else { return }
         currentHint = l[typed]
+        trackHint()
         events.append(.hint(l[typed]))
     }
 
@@ -38,6 +39,7 @@ extension DuelEngine {
         }
         guard let c = letter, clock - since >= tuning.hintSeconds else { return }
         currentHint = c
+        trackHint()
         if target != .none { wordClean = false }
         hintedBeforeLock = target == .none
         events.append(.hint(c))

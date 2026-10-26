@@ -23,9 +23,9 @@ extension DuelEngine {
     }
 
     /// 对手血量按玩家手速换算，使一场打下来约为目标时长。
-    static func opponentHP(secondsPerLetter: Double, tuning: Tuning) -> Int {
+    static func opponentHP(secondsPerLetter: Double, tuning: Tuning, targetSeconds: Double? = nil) -> Int {
         let perStrikeSeconds = 7 * secondsPerLetter * 1.5
-        let hp = tuning.duelTargetSeconds / perStrikeSeconds * 7.5
+        let hp = (targetSeconds ?? tuning.duelTargetSeconds) / perStrikeSeconds * 7.5
         return max(50, Int(hp.rounded()))
     }
 }

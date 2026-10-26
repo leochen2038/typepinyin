@@ -1,16 +1,29 @@
 import CoreText
 import DuelCore
 import Foundation
+import LearningCore
 
-/// 打包的只读数据：测试词表、键盘尺寸表、默认调参；以及本机保存的调参覆盖值。
+/// 打包的只读数据：内容包、键盘尺寸表、默认调参。
 @MainActor
 enum AppResources {
-    static let bank: WordBank = {
-        guard let url = Bundle.main.url(forResource: "duel-words", withExtension: "json"),
-              let data = try? Data(contentsOf: url), let bank = try? WordBank.load(from: data) else {
-            fatalError("duel-words.json 缺失或格式不对")
+    /// 内容包：音节、常用字、词、地区、奇遇（生成脚本产出）。
+    static let content: LearningContent = {
+        guard let url = Bundle.main.url(forResource: "content", withExtension: "json"),
+              let data = try? Data(contentsOf: url), let c = try? LearningContent.load(from: data) else {
+            fatalError("content.json 缺失或格式不对")
         }
-        return bank
+        return c
+    }()
+
+    /// 旅程用的词表：把内容包转成比武引擎认的格式（学会哪些音节由旅程按存档给）。
+    static let journeyBank: WordBank = {
+        let syl = content.syllables.map {
+            Syllable(spelling: $0.spelling, volume: $0.volume, isHard: $0.hardReason != nil,
+                     parts: .init(initial: $0.parts.initial, medial: $0.parts.medial, final: $0.parts.final), hardReason: $0.hardReason)
+        }
+        let words = content.words.map { Word(text: $0.text, syllables: $0.syllables, volume: $0.volume, isIdiom: $0.isIdiom) }
+        let passages = content.comparisonPassages.map { WordBank.Passage(id: $0.id, text: $0.text, syllables: $0.syllables) }
+        return WordBank(syllables: syl, words: words, learned: [], comparisonPassages: passages)
     }()
 
     static let keyboardMetrics: KeyboardMetricsTable = {

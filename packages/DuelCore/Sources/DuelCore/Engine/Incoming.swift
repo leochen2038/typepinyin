@@ -43,7 +43,7 @@ extension DuelEngine {
             firstLetterAt = nil
         }
         opponent.incoming = nil
-        player.hp = max(0, player.hp - dmg)
+        _ = hurtPlayer(dmg)
         emit(.hitByIncoming(damage: dmg))
         breakCombo()
         scheduleNextAttack(from: clock)

@@ -1,4 +1,5 @@
 import Foundation
+import LearningCore
 
 /// 比武的全部可调数值。App 里的默认值在 Resources/Tuning.default.json。
 public struct Tuning: Codable, Sendable, Equatable {
@@ -51,8 +52,10 @@ public struct Tuning: Codable, Sendable, Equatable {
     public var bossPushBack: Double = 0.2
     public var bossCycleCards: Double = 3
     public var bossHit: Int = 8
-    /// 试玩：打什么。0 = 比武，1 = 短句（奇遇·代写家书，一句一张牌），2 = 文章（下一篇，连着打、和之前的你比）。
-    public var textMode: Int = 0
+    /// 学习规则的数值（熟练度、复习、出字、摸底、手速、初入江湖）。
+    public var learning: LearningTuning = LearningTuning()
+    /// 打什么：3 = 旅程（默认：初入江湖、地区、总地图），0 = 比武，1 = 短句（奇遇），2 = 文章（下一篇）。
+    public var textMode: Int = 3
     /// 试玩：打文字时的动效。0 = 简版（打完一句半秒快爆），1 = 战斗动效 + 回顾（打完一句翻回顾牌、逐个字母爆开），
     /// 2 = 战斗动效、不要回顾（下划线、打完一个字变红迸粒子，打完一句马上下一句；默认）。
     public var textStyle: Int = 2
@@ -113,6 +116,7 @@ public struct Tuning: Codable, Sendable, Equatable {
         case cardsOnTable, pressureFactor, pressureBaseSeconds, pressureMinSeconds, grabStyle, handZones, slashMinGap, grabMode, qiBar, moveDots, rankFx, rankFxTheme, finisherShare, perfectQi, groupFight, groupSize, groupTotal, textMode, textStyle
         case foeLives, finisherTakesLife, lifeSpeedup, lifeDownSeconds
         case bossPressure, bossPushBack, bossCycleCards, bossHit
+        case learning
     }
 
     /// 缺少的字段用默认值，这样旧的覆盖文件在加了新字段后仍然能读。
@@ -181,6 +185,7 @@ public struct Tuning: Codable, Sendable, Equatable {
         bossPushBack = try v(.bossPushBack, d.bossPushBack)
         bossCycleCards = try v(.bossCycleCards, d.bossCycleCards)
         bossHit = try v(.bossHit, d.bossHit)
+        learning = try v(.learning, d.learning)
         textMode = try v(.textMode, d.textMode)
         textStyle = try v(.textStyle, d.textStyle)
         handZones = try v(.handZones, d.handZones)

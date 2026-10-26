@@ -40,7 +40,11 @@ extension DuelEngine {
             if features.contains(.store) { cards[i].frozenStore = storeAt(cards[i], clock) }
             beginTarget(readyFrom: max(readyAt, cards[i].dealtAt))
             checkComboGapOnLock()
+            resetTrack(for: cards[i].word)
+            if hintPendingFirst { track.hinted[0] = true }
+            hintPendingFirst = false
             cards[i].typed = String(c)
+            trackAccepted(word: cards[i].word, pos: 0)
             emit(.locked(.card(i)))
             emit(.letterAccepted(.card(i), c))
             checkCardDone(i)
@@ -82,10 +86,12 @@ extension DuelEngine {
         guard pos < letters.count else { return }
         if letters[pos] == c {
             cards[i].typed.append(c)
+            trackAccepted(word: cards[i].word, pos: pos)
             lastAcceptedAt = clock
                 emit(.letterAccepted(.card(i), c))
             checkCardDone(i)
         } else {
+            trackWrong(word: cards[i].word, pos: pos)
             wrongLetter(word: cards[i].word, typed: pos, onIncoming: false)
         }
     }
@@ -116,9 +122,13 @@ extension DuelEngine {
             if n == 1 {
                 if !newMoves.contains(s) { newMoves.append(s) }
                 emit(.newMove(s))
-                // 新招：接下来补的第 2 张、第 5 张牌里再出现它（原来是拆招卡关掉时排，拆招卡已删）
                 learner.taught.insert(s)
-                for k in tuning.replayOffsets { learner.replayQueue.append((deal: dealCount + k - 1, syllable: s)) }
+                if let source {
+                    source.newMove(s)                           // 旅程：复现由出牌来源安排
+                } else {
+                    // 新招：接下来补的第 2 张、第 5 张牌里再出现它
+                    for k in tuning.replayOffsets { learner.replayQueue.append((deal: dealCount + k - 1, syllable: s)) }
+                }
             }
             hintNow(word: word, typed: typed)
             return
@@ -129,10 +139,10 @@ extension DuelEngine {
             return
         }
         let dmg = tuning.mistakeDamage
-        player.hp = max(0, player.hp - dmg)
+        let dead = hurtPlayer(dmg)
         emit(.mistake(s, damage: dmg))
         breakCombo()
-        if player.hp <= 0 { finish(won: false); return }
+        if dead { finish(won: false); return }
         hintNow(word: word, typed: typed)
     }
 
@@ -153,6 +163,7 @@ extension DuelEngine {
         let perLetter = firstLetterAt.map { (clock - $0 + max(0, $0 - readyAt) * 0.5) / Double(max(1, card.word.letterCount)) } ?? 9
         let gold = wordClean && perLetter <= tuning.goldSecondsPerLetter
         recordSpeed(word: card.word)
+        source?.cardDone(card.word, clean: wordClean)
         if heavy, opponent.incoming != nil {                  // 重招打断蓄力
             opponent.incoming = nil
             emit(.chargeInterrupted)

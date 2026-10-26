@@ -1,4 +1,5 @@
 import DuelCore
+import LearningCore
 import Observation
 import QuartzCore
 import SpriteKit
@@ -140,7 +141,40 @@ final class DuelController {
     let music = MusicLayers()
     private let speaker = Speaker()
 
+    /// 旅程给的下一场：词表、单场设置、出牌来源、对手、打完的回调。nil = 切片的比武。
+    struct DuelPlan {
+        var bank: WordBank
+        var setup: DuelSetup
+        var source: CardSource
+        var foeName: String
+        var foeTitle: String
+        var robe: UIColor
+        /// 比武背景用哪片地区的长卷、第几站（nil = 切片的深蓝底）。
+        var backdrop: (region: String, station: Int)?
+        /// 引擎事件（入门提示用）。
+        var onEvent: ((DuelEvent) -> Void)?
+        /// 打完、小结出来之前：交回结果，旅程据此填小结卡片的收获和按钮。
+        /// 第三个参数是这一场结束时的手速（每个字母的平均用时）。
+        var onFinish: (DuelSummary, [Attempt], Double) -> Void
+    }
+
+    struct SummaryAction: Identifiable {
+        var id: String { label }
+        var label: String
+        var primary: Bool
+        var action: () -> Void
+    }
+
+    @ObservationIgnored var plan: DuelPlan?
+    /// 旅程填的小结卡片：多出来的收获和按钮（空 = 切片的「再来一场」）。
+    var summaryGains: [String] = []
+    var summaryActions: [SummaryAction] = []
+    /// 入门提示（旅程里第一次遇到时显示一句）。
+    var tip: String?
+
     @ObservationIgnored private var engine: DuelEngine
+    /// 旅程（调参面板「清空进度」用）。
+    @ObservationIgnored weak var journey: JourneyController?
     @ObservationIgnored private var link: CADisplayLink?
     @ObservationIgnored private weak var keyboard: KeyboardView?
     @ObservationIgnored private var round = 0
@@ -159,7 +193,9 @@ final class DuelController {
         let seed: UInt64 = AppResources.isUITest ? 7 : UInt64(Date().timeIntervalSince1970 * 1000)
         var t = tuning
         if AppResources.isUITest { t.movesPerDuel = 1 }      // UI 测试：一招就赢
-        let e = DuelEngine(bank: AppResources.bank, tuning: t, opponent: Opponent(name: n.0, title: n.1), seed: seed)
+        // 切片的比武：基本功按已学会算，别的卷第一次错是新招
+        let base = Set(AppResources.content.syllables(in: "base").map(\.spelling))
+        let e = DuelEngine(bank: AppResources.journeyBank, tuning: t, opponent: Opponent(name: n.0, title: n.1), seed: seed, learned: base)
         e.holdNewCards = true            // 新牌先被回顾牌盖着：露出来才开始计时（见 reviews 的 didSet）
         return e
     }
@@ -177,10 +213,23 @@ final class DuelController {
     func start() {
         // 演示用（-demoMoves N）：一场只打 N 招，模拟器上很快就能看到最后的必杀
         if UserDefaults.standard.object(forKey: "demoMoves") != nil { tuning.movesPerDuel = UserDefaults.standard.integer(forKey: "demoMoves") }
-        engine = Self.makeEngine(tuning: tuning, round: round)
+        if let p = plan {
+            let seed = UInt64(Date().timeIntervalSince1970 * 1000)
+            var t = tuning
+            t.textMode = 0
+            engine = DuelEngine(bank: p.bank, tuning: t, opponent: Opponent(name: p.foeName, title: p.foeTitle),
+                                seed: seed, setup: p.setup, source: p.source)
+            engine.holdNewCards = true
+        } else {
+            engine = Self.makeEngine(tuning: tuning, round: round)
+        }
+        summaryGains = []
+        summaryActions = []
+        tip = nil
         sounds.hapticsOn = true
         scene.groupEnd()                          // 先换回单挑的对手，再换衣服
-        scene.setFoe(robe: robes[round % robes.count])
+        scene.setFoe(robe: plan?.robe ?? robes[round % robes.count])
+        scene.setBackdrop(regionId: plan?.backdrop?.region, station: plan?.backdrop?.station ?? 0)
         scene.speed = 1 / Self.fxSlow            // -slowfx：人物动作也一起放慢
         scene.reset()
         if tuning.groupFight && tuning.cardsOnTable <= 1 { scene.groupBegin() }
@@ -200,6 +249,7 @@ final class DuelController {
         scene.setCharge(0)
         let ev = engine.start(at: CACurrentMediaTime())
         if AppResources.isUITest { setUITestOpponent() }
+        if plan != nil && JourneyFlags.fast { engine.debugSetOpponentHP(12) }      // 跳过动画：一两招就打完
         apply(ev)
         sync()
         startLink()
@@ -396,6 +446,7 @@ final class DuelController {
     // MARK: - 事件 → 演出
 
     private func apply(_ events: [DuelEvent]) {
+        if let on = plan?.onEvent { for e in events { on(e) } }
         // 群战：出招时补上来的、被打倒的敌人等最后一刀落下再演（在 .strike 里处理），别的时候马上演
         let inStrike = events.contains { if case .strike = $0 { return true } else { return false } }
         let lifeLost = events.contains { if case .lifeLost = $0 { return true } else { return false } }
@@ -619,6 +670,7 @@ final class DuelController {
         heat = 0
         scene.setHeat(0)
         music.setLevel(0)
+        if let p = plan, let s = engine.summary { p.onFinish(s, engine.attempts, engine.player.secondsPerLetter) }
         summary = engine.summary
         link?.invalidate()
         link = nil
@@ -676,19 +728,8 @@ final class DuelController {
         if self[keyPath: kp] != v { self[keyPath: kp] = v }
     }
 
-    static func volumeName(_ v: String) -> String {
-        switch v {
-        case "biyin-shang": "鼻音掌上卷"
-        case "biyin-xia": "鼻音掌下卷"
-        case "liangzi-shang": "两字诀上卷"
-        case "liangzi-xia": "两字诀下卷"
-        case "yw": "yw 身法"
-        case "lv": "ü 步"
-        case "shengzi": "省字诀"
-        case "sanpin": "三拼剑谱"
-        default: "基本功"
-        }
-    }
+    /// 牌上的卷名（规则在 LearningCore，只有一份）。
+    static func volumeName(_ v: String) -> String { Volumes.name(v == "sanpin" ? "sanpin-shang" : v) }
 
     static func rankName(_ r: Int) -> String { ["零重", "一重", "二重", "三重", "四重", "五重"][min(5, max(0, r))] }
 }

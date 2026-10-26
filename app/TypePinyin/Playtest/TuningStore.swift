@@ -17,7 +17,15 @@ enum TuningStore {
         guard let data = UserDefaults.standard.data(forKey: key),
               let over = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               var all = fields(base) else { return base }
-        all.merge(over) { $1 }
+        // learning 一节按子字段合并：只覆盖改过的子字段，其余跟着新版本的默认值
+        for (k, v) in over {
+            if let sub = v as? [String: Any], var cur = all[k] as? [String: Any] {
+                cur.merge(sub) { $1 }
+                all[k] = cur
+            } else {
+                all[k] = v
+            }
+        }
         guard let merged = try? JSONSerialization.data(withJSONObject: all),
               let t = try? JSONDecoder().decode(Tuning.self, from: merged) else { return base }
         return t
@@ -38,7 +46,16 @@ enum TuningStore {
     /// 和默认值不一样的项。
     private static func overrides(_ t: Tuning) -> [String: Any]? {
         guard let cur = fields(t), let def = fields(AppResources.defaultTuning) else { return nil }
-        return cur.filter { k, v in !((def[k] as AnyObject?)?.isEqual(v) ?? false) }
+        var out: [String: Any] = [:]
+        for (k, v) in cur {
+            if let sub = v as? [String: Any], let dsub = def[k] as? [String: Any] {     // learning：再往下比一层
+                let diff = sub.filter { sk, sv in !((dsub[sk] as AnyObject?)?.isEqual(sv) ?? false) }
+                if !diff.isEmpty { out[k] = diff }
+            } else if !((def[k] as AnyObject?)?.isEqual(v) ?? false) {
+                out[k] = v
+            }
+        }
+        return out
     }
 
     private static func fields(_ t: Tuning) -> [String: Any]? {
