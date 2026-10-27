@@ -22,9 +22,10 @@ struct RegionTopBar: View {
                 Text(region.name).font(Fonts.display(22))
                 Text(Volumes.name(region.volume)).font(.system(size: 12, weight: .bold)).foregroundStyle(Palette.slate)
             }
+            .overlay(PanelGesture { j.showPanel = true })
             Spacer()
             let n = route.stations.count
-            Text("第 \(min(j.stationIndex + 1, n)) 站 · 还剩 \(max(0, n - j.stationIndex - 1)) 站")
+            Text(j.isReplay ? "再来一场" : "第 \(min(j.stationIndex + 1, n)) 站 · 还剩 \(max(0, n - j.stationIndex - 1)) 站")
                 .font(.system(size: 13, weight: .bold)).foregroundStyle(Palette.ink)
             ZStack {
                 Circle().stroke(Palette.mist2, lineWidth: 5)

@@ -2,7 +2,7 @@ import LearningCore
 import SwiftUI
 
 /// 一片地区的竖长卷（简化版）：山路从山脚画到掌门所在的地方，站牌立在路边，小人站在当前一站。
-/// 用粗墨线、平涂撞色画；景物按地区换（十里坡：古树、大石、茶摊；半山镇：石阶、山门、茶林）。
+/// 用粗墨线、平涂撞色画；景物按地区换（葫芦集：葫芦架、大石、古树；半山镇：石阶、山门、茶林）。
 struct RegionScrollView: View {
     let region: Region
     let route: Route
@@ -122,7 +122,10 @@ struct RegionScrollView: View {
             default: k % 3 == 1 ? stone(ctx, CGPoint(x: x, y: y)) : tree(ctx, CGPoint(x: x, y: y), t)
             }
         }
-        if region.id == "shilipo" { teaStall(ctx, CGPoint(x: w * 0.82, y: h - 260), t) }
+        if region.id == "huluji" {
+            teaStall(ctx, CGPoint(x: w * 0.82, y: h - 260), t)
+            for k in 0..<5 { gourdTrellis(ctx, CGPoint(x: k % 2 == 0 ? w * 0.14 : w * 0.86, y: h - 420 - CGFloat(k) * 210)) }
+        }
         if region.id == "banshanzhen" { gate(ctx, Self.point(Double(n - 1), count: n, width: w).applying(.init(translationX: 0, y: 60)), t) }
     }
 
@@ -180,6 +183,24 @@ struct RegionScrollView: View {
         let flag = Path(CGRect(x: p.x + 30, y: p.y - 70, width: 14, height: 22))
         ctx.fill(flag, with: .color(.white))
         ctx.stroke(flag, with: .color(Palette.ink), lineWidth: 2)
+    }
+
+    /// 葫芦架：两根竹竿一根横梁，下面挂几个葫芦。
+    func gourdTrellis(_ ctx: GraphicsContext, _ p: CGPoint) {
+        for d in [-26, 26] as [CGFloat] {
+            var pole = Path(); pole.move(to: CGPoint(x: p.x + d, y: p.y)); pole.addLine(to: CGPoint(x: p.x + d, y: p.y - 56))
+            ctx.stroke(pole, with: .color(Palette.ink), lineWidth: 3)
+        }
+        var beam = Path(); beam.move(to: CGPoint(x: p.x - 34, y: p.y - 56)); beam.addLine(to: CGPoint(x: p.x + 34, y: p.y - 56))
+        ctx.stroke(beam, with: .color(Palette.ink), lineWidth: 4)
+        for d in [-14, 2, 16] as [CGFloat] {
+            let top = Path(ellipseIn: CGRect(x: p.x + d - 4, y: p.y - 50, width: 8, height: 8))
+            let bottom = Path(ellipseIn: CGRect(x: p.x + d - 7, y: p.y - 44, width: 14, height: 14))
+            for g in [bottom, top] {
+                ctx.fill(g, with: .color(Color(hex: 0xE3B04B)))
+                ctx.stroke(g, with: .color(Palette.ink), lineWidth: 1.5)
+            }
+        }
     }
 
     func gate(_ ctx: GraphicsContext, _ p: CGPoint, _ t: RegionTheme) {

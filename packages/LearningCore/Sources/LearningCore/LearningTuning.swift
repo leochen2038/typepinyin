@@ -51,9 +51,29 @@ public struct LearningTuning: Codable, Sendable, Equatable {
     /// 每场结束按这个权重滑动更新。
     public var speedWeight: Double = 0.2
 
+    // 第一关减负
+    /// 初入江湖每场最多探几个音节（第一场不探）。默认 0：初入江湖只用第一卷的 30 个音节。
+    public var openingProbesPerDuel: Int = 0
+
+    // 招式牌几个字（依次是二、三、四、五字的比重）
+    /// 地区里前两站。
+    public var earlyLengths: [Double] = [0.85, 0.15, 0, 0]
+    /// 地区里中间几站。
+    public var middleLengths: [Double] = [0.55, 0.25, 0.2, 0]
+    /// 掌门。
+    public var bossLengths: [Double] = [0, 0.4, 0.35, 0.25]
+
+    /// 比重数组转成 [字数: 比重]。
+    public static func lengthMap(_ w: [Double]) -> [Int: Double] {
+        var m: [Int: Double] = [:]
+        for (k, v) in w.enumerated() where v > 0 { m[k + 2] = v }
+        return m.isEmpty ? [2: 1] : m
+    }
+
     // 初入江湖
-    public var openingBattles: Int = 3
-    public var openingTargetSeconds: Double = 40
+    /// 初入江湖（梦里和妙笔书生过招）几场、一场多长。
+    public var openingBattles: Int = 1
+    public var openingTargetSeconds: Double = 80
     public var openingMinHP: Int = 1
 
     public init() {}
@@ -63,7 +83,8 @@ public struct LearningTuning: Codable, Sendable, Equatable {
         case replayOffsets, reviewDays, mixKnown, mixNew, mixReview, mixFiller, newPerDuel, newGap, newPerDay
         case afterMissKnown, successTarget, successWindow, recentWords
         case probeFamilies, probePerFamily, probeFocusMisses, probeFocusExtra, speedWeight
-        case openingBattles, openingTargetSeconds, openingMinHP
+        case openingBattles, openingTargetSeconds, openingMinHP, openingProbesPerDuel
+        case earlyLengths, middleLengths, bossLengths
     }
 
     /// 缺少的字段用默认值，旧的覆盖文件在加了新字段后仍然能读。
@@ -98,5 +119,9 @@ public struct LearningTuning: Codable, Sendable, Equatable {
         openingBattles = try v(.openingBattles, d.openingBattles)
         openingTargetSeconds = try v(.openingTargetSeconds, d.openingTargetSeconds)
         openingMinHP = try v(.openingMinHP, d.openingMinHP)
+        openingProbesPerDuel = try v(.openingProbesPerDuel, d.openingProbesPerDuel)
+        earlyLengths = try v(.earlyLengths, d.earlyLengths)
+        middleLengths = try v(.middleLengths, d.middleLengths)
+        bossLengths = try v(.bossLengths, d.bossLengths)
     }
 }

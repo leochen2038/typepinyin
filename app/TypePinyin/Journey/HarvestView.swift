@@ -7,6 +7,7 @@ struct HarvestView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("收功").font(Fonts.display(40))
+                .overlay(PanelGesture { j.showPanel = true })
             ForEach(j.harvestLines, id: \.self) { l in
                 HStack(spacing: 8) {
                     Rectangle().fill(Palette.gold).frame(width: 10, height: 10).overlay(Rectangle().stroke(Palette.ink, lineWidth: 2))

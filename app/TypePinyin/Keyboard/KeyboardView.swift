@@ -66,7 +66,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         super.layoutSubviews()
         guard bounds.width > 0 else { return }
         let m = metrics
-        if geometry?.metrics != m { build(KeyGeometry(metrics: m)) } else { drawDivider(tuning().handZones) }   // 高度变了要重画
+        if geometry?.metrics != m { build(KeyGeometry(metrics: m)) } else { drawDivider(tuning().handZones || guide) }   // 高度变了要重画
     }
 
     private func build(_ g: KeyGeometry) {
@@ -81,6 +81,11 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         }
         addSubview(popup)
         bringSubviewToFront(popup)
+        // 键重建以后补上原来的提示（教学引导开打时键盘可能还没排好）
+        if let h = hinted {
+            keyViews[h]?.setHint(true)
+            if case .letter(let c) = h { zoneGlow = side(c) }
+        }
         applyZones()
     }
 
@@ -94,8 +99,11 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         return v.frame.midX - bounds.midX < v.frame.width / 2
     }
 
+    /// 教学引导：不管调参开没开，都画左右手分界线、亮出该按的那一边。
+    var guide = false { didSet { applyZones() } }
+
     private func applyZones() {
-        let on = tuning().handZones
+        let on = tuning().handZones || guide
         for (kind, v) in keyViews {
             guard case .letter(let c) = kind else { continue }
             v.zoneColor = on && zoneGlow != nil && zoneGlow == side(c) ? UIColor(hex: 0xFFF0C8) : .white

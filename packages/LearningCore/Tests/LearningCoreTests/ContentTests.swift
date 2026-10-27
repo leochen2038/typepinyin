@@ -3,9 +3,9 @@ import Testing
 @testable import LearningCore
 
 @Suite struct ContentTests {
-    @Test func loadsAll404Syllables() {
+    @Test func loadsAllSyllables() {
         let c = TestContent.shared
-        #expect(c.syllables.count == 404)
+        #expect(c.syllables.count == 401)        // 3500 个常用字的规范读音
         #expect(c.commonChars.count == 3500)
         #expect(c.regions.count == 10)
         #expect(c.places.count == 2)
@@ -14,7 +14,7 @@ import Testing
     /// 和生成脚本导出的对照表完全一致。
     @Test func classifyMatchesGenerator() throws {
         let table = try JSONDecoder().decode([String: String].self, from: TestContent.fixture("volumes.json"))
-        #expect(table.count == 404)
+        #expect(table.count == 401)
         for (s, v) in table { #expect(Volumes.classify(s) == v, "\(s)") }
     }
 

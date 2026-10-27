@@ -34,8 +34,21 @@ public enum Volumes {
 
     static let initials = ["zh", "ch", "sh", "b", "p", "m", "f", "d", "t", "n", "l", "g", "k", "h", "j", "q", "x", "r", "z", "c", "s", "y", "w"]
 
-    /// 按拼写规则归卷：yw 身法 → ü 步 → 省字诀 → 三拼剑谱 → 鼻音掌 → 两字诀，都不是的归基本功。
+    /// 第一关（基本功）只练这 30 个：单个字母的声母加单韵母、没有翘舌，按字的常用程度挑的。
+    public static let baseCore: Set<String> = Set("ba bi bu ci da de di du er fa fu ge gu he hu ji ke le li lu mo na ni qi ru si ta ti xi zi".split(separator: " ").map(String.init))
+
+    /// 按拼写规则归卷：yw 身法 → ü 步 → 省字诀 → 三拼剑谱 → 鼻音掌 → 两字诀，都不是的归基本功；
+    /// 基本功只留 baseCore 那 30 个，其余的按韵母挂到最像的一卷。
     public static func classify(_ s: String) -> String {
+        let v = classifyBySpelling(s)
+        guard v == "base", !baseCore.contains(s), let last = s.last else { return v }
+        if "ae".contains(last) { return "liangzi-shang" }       // a、e 结尾 → 两字诀上卷（ai ei）
+        if "ou".contains(last) { return "liangzi-xia" }         // o、u 结尾 → 两字诀下卷（ao ou）
+        if last == "i" { return "shengzi" }                     // i 结尾 → 省字诀（iu ui）
+        return "biyin-xia"                                     // hng
+    }
+
+    static func classifyBySpelling(_ s: String) -> String {
         guard let first = s.first else { return "base" }
         let ini = initials.first { s.hasPrefix($0) && s.count > $0.count } ?? ""
         let rest = String(s.dropFirst(ini.count))
@@ -157,6 +170,16 @@ public struct Encounter: Codable, Sendable, Hashable, Identifiable {
     public var reply: String
 }
 
+/// 初入江湖的梦：开场白、醒来的话、梦里的对手、专门挑的好打的词。
+public struct Dream: Codable, Sendable, Hashable {
+    public var intro: String
+    public var outro: String
+    public var boss: Fighter
+    public var words: [ContentWord]
+    /// 第一张牌（教学）固定打的词。
+    public var tutorial: ContentWord?
+}
+
 /// 一段只打不比的文字：键盘对比页、试玩的文章。
 public struct TextPassage: Codable, Sendable, Hashable, Identifiable {
     public var id: String
@@ -180,6 +203,7 @@ public struct LearningContent: Sendable {
     public var comparisonPassages: [TextPassage]
     /// 试玩的文章（下一篇）。
     public var articles: [TextPassage]
+    public var dream: Dream?
 
     public let syllableTable: [String: ContentSyllable]
     /// 每个音节在哪些词里（下标指向 `words`，按词频排）。
@@ -195,6 +219,7 @@ public struct LearningContent: Sendable {
         var encounters: [Encounter]
         var comparisonPassages: [TextPassage]?
         var articles: [TextPassage]?
+        var dream: Dream?
     }
 
     public static func load(from data: Data) throws -> LearningContent {
@@ -212,6 +237,7 @@ public struct LearningContent: Sendable {
         encounters = raw.encounters
         comparisonPassages = raw.comparisonPassages ?? []
         articles = raw.articles ?? []
+        dream = raw.dream
         syllableTable = Dictionary(raw.syllables.map { ($0.spelling, $0) }, uniquingKeysWith: { a, _ in a })
         var by: [String: [Int]] = [:]
         for (i, w) in raw.words.enumerated() where !w.isIdiom {
@@ -234,6 +260,9 @@ public struct LearningContent: Sendable {
     /// 一卷的全部音节、其中算常用的。
     public func syllables(in volume: String) -> [ContentSyllable] { syllables.filter { $0.volume == volume } }
     public func commonSyllables(in volume: String) -> [ContentSyllable] { syllables(in: volume).filter(\.isCommon) }
+
+    /// 计入重数的音节：这一卷的全部常用音节。
+    public func rankSyllables(in volume: String, tuning: LearningTuning) -> [ContentSyllable] { commonSyllables(in: volume) }
 
     public func region(_ id: String) -> Region? { regions.first { $0.id == id } }
     public func place(_ id: String) -> Place? { places.first { $0.id == id } }

@@ -11,7 +11,8 @@ struct RegionTheme {
 
     static func of(_ regionId: String) -> RegionTheme {
         switch regionId {
-        case "shilipo": RegionTheme(sky: 0xF3E9D2, farHill: 0xB9C7A0, nearHill: 0x7E9B5A, road: 0xE6C98F, accent: 0xC8553D)
+        case "huluji": RegionTheme(sky: 0xF3E9D2, farHill: 0xB9C7A0, nearHill: 0x7E9B5A, road: 0xE6C98F, accent: 0xC8553D)
+        case "dream": RegionTheme(sky: 0xE6E0F2, farHill: 0xC9C1E0, nearHill: 0x9C8FC4, road: 0xEDE6F7, accent: 0x7B5FB0)
         case "banshanzhen": RegionTheme(sky: 0xE4EEE6, farHill: 0x9DB8A6, nearHill: 0x4E7D5B, road: 0xD9CFB8, accent: 0x3B6E4A)
         default: RegionTheme(sky: 0xE7EAF1, farHill: 0xB8BFD3, nearHill: 0x6A7390, road: 0xE6D8B8, accent: 0xE2432C)
         }

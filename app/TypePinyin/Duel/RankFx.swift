@@ -20,7 +20,7 @@ enum RankFx {
     static let order = ["base", "liangzi-shang", "liangzi-xia", "biyin-shang", "biyin-xia", "yw", "shengzi", "lv", "sanpin-shang", "sanpin-xia"]
 
     static let themes: [String: Theme] = [
-        "base": Theme(name: "十里坡 · 彩纸", kind: .confetti, colors: Confetti.paper, accent: Palette.gold),
+        "base": Theme(name: "葫芦集 · 彩纸", kind: .confetti, colors: Confetti.paper, accent: Palette.gold),
         "liangzi-shang": Theme(name: "白梅台 · 白梅", kind: .plum,
                                colors: [.white, Color(hex: 0xFFE3EA), .white], accent: Color(hex: 0xF08AA8)),
         "liangzi-xia": Theme(name: "潮头岛 · 浪花", kind: .drop,

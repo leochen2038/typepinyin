@@ -26,6 +26,7 @@ extension DuelEngine {
     /// 1 张牌模式：每张新牌都开始一次对手蓄力（掌门打不断时只在没在蓄力时开始）。
     func startPressure() {
         guard singleCard, features.contains(.incoming), let card = cards.first(where: { !$0.inactive }) else { return }
+        if setup.firstCardFree && moveMarks.isEmpty { return }      // 教学：第一张牌打完之前不蓄力
         if bossMode {
             guard opponent.pressureStart == nil else { return }
             let d = bossCycleSeconds

@@ -14,6 +14,10 @@ public struct DuelSetup: Sendable {
     /// 对手几条命、蓄力打不断；nil = 调参里的。
     public var lives: Int?
     public var bossPressure: Bool?
+    /// 这一场是群战；nil = 调参里的。
+    public var groupFight: Bool?
+    /// 第一张牌不蓄力（教学：跟着亮起来的键慢慢按）。
+    public var firstCardFree = false
     /// 今天是哪一天（交回的打字结果带上）。
     public var day: DayIndex = 0
 

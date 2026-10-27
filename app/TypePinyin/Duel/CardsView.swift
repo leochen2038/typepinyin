@@ -246,9 +246,13 @@ struct CardView: View {
     var body: some View {
         let glow = min(1, (card.store - 1))
         ZStack(alignment: .topLeading) {
-            VStack(spacing: 2) {
-                WordColumns(card: card, scale: big ? 1.4 : 1)
-                Text(card.volumeLabel).font(.system(size: 9, weight: .bold)).foregroundStyle(Palette.slate2).lineLimit(1)
+            GeometryReader { g in
+                VStack(spacing: 2) {
+                    // 四个字以上（长词、五字句）按牌宽算字号，不挤出牌外
+                    WordColumns(card: card, scale: big ? 1.4 : 1, fitWidth: card.text.count >= 4 ? g.size.width - 16 : nil)
+                    Text(card.volumeLabel).font(.system(size: 9, weight: .bold)).foregroundStyle(Palette.slate2).lineLimit(1)
+                }
+                .frame(width: g.size.width, height: g.size.height)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.horizontal, 4)

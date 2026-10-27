@@ -86,4 +86,17 @@ import LearningCore
         clock.type(e, "engyou", dt: 0.1)
         #expect(e.attempts.first?.usedHint == true)
     }
+
+    /// 教学：第一张牌不蓄力，打完以后照常。
+    @Test func firstCardFreeHasNoPressureUntilFirstStrike() {
+        var s = DuelSetup()
+        s.firstCardFree = true
+        let e = engine(FixedSource([Fixture.word("朋友"), Fixture.word("光明")]), setup: s)
+        #expect(e.opponent.pressureStart == nil)
+        let clock = FakeClock()
+        let ev = clock.wait(e, 20)
+        #expect(!ev.contains(.hitByIncoming(damage: 10)))
+        clock.type(e, "pengyou")
+        #expect(e.opponent.pressureStart != nil)
+    }
 }

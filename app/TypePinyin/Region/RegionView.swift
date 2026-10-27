@@ -46,7 +46,7 @@ struct RegionView: View {
                     if let card = j.pendingCard, j.obtained == nil, j.rankUp == nil {
                         VStack {
                             Spacer()
-                            RegionCard(card: card, onGo: { j.continueRoute() }, onRest: { j.harvest() })
+                            RegionCard(card: card, onGo: { j.continueRoute() }, onRest: { j.harvest() }, onBack: { j.pendingCard = nil; j.screen = .map })
                         }
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
@@ -148,6 +148,7 @@ struct RegionCard: View {
     let card: JourneyController.PendingCard
     let onGo: () -> Void
     let onRest: () -> Void
+    var onBack: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -162,8 +163,13 @@ struct RegionCard: View {
                 }
             }
             HStack(spacing: 12) {
-                button(card.won ? (card.finished ? "回江湖" : "接着走") : "再来一次", primary: true, action: onGo)
-                if !card.finished { button("收功", primary: false, action: onRest) }
+                if card.replay && card.won {
+                    button("再来一场", primary: true, action: onGo)
+                    button("回江湖", primary: false, action: onBack)
+                } else {
+                    button(card.won ? (card.finished ? "回江湖" : "接着走") : "再来一次", primary: true, action: onGo)
+                    if !card.finished { button("收功", primary: false, action: onRest) }
+                }
             }
         }
         .padding(18)

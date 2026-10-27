@@ -75,6 +75,7 @@ struct TuningPanelView: View {
         I(label: "摸底探几族", kp: \.learning.probeFamilies, range: 0...6),
         I(label: "摸底每族探几个", kp: \.learning.probePerFamily, range: 1...8),
         I(label: "初入江湖几场", kp: \.learning.openingBattles, range: 1...5),
+        I(label: "初入江湖每场探几个（0 = 只用第一卷的音节）", kp: \.learning.openingProbesPerDuel, range: 0...3),
     ]
     private let ints: [I] = [
         I(label: "被来招打中掉血", kp: \.incomingDamage, range: 0...50),

@@ -4,7 +4,7 @@ import Foundation
 /// 必杀打全场；倒下一个，队里的下一个补到空出来的站位上。一共 groupTotal 个，打完最后一个才赢。
 /// 一场多长用敌人的等级来控制（喽啰血少、头目血多），不单独调每个人的血。
 extension DuelEngine {
-    var groupMode: Bool { tuning.groupFight && singleCard }
+    var groupMode: Bool { (setup.groupFight ?? tuning.groupFight) && singleCard }
 
     /// 出场顺序：最后一个是头目，每第三个是镖师，其余是喽啰（五个人：喽啰、喽啰、镖师、喽啰、头目）。
     static func groupLineup(total: Int) -> [FoeTier] {

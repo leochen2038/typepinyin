@@ -2,7 +2,7 @@ import LearningCore
 import ProgressStore
 import SwiftUI
 
-/// 江湖总地图：最下面初入江湖一条直路到十里坡；往上九片地区排成四层（上卷在左、下卷在右），
+/// 江湖总地图：最下面初入江湖一条直路到葫芦集；往上九片地区排成四层（上卷在左、下卷在右），
 /// 层间斜着连路；武林大会单独在山顶。没有推荐标记，不画玩家的小人。
 struct WorldMapView: View {
     @State var j: JourneyController
@@ -72,7 +72,7 @@ struct WorldMapView: View {
                         }
                         .frame(width: w, height: h)
                     }
-                    .onAppear { proxy.scrollTo("shilipo", anchor: .bottom) }
+                    .onAppear { proxy.scrollTo("huluji", anchor: .bottom) }
                     .onChange(of: selected) { _, id in
                         guard let id, let s = spot(id), point(s, width: w, height: h).y > h * 0.45 else { return }
                         withAnimation { proxy.scrollTo(id, anchor: UnitPoint(x: 0.5, y: 0.25)) }
@@ -101,6 +101,7 @@ struct WorldMapView: View {
     var topBar: some View {
         HStack {
             Text("江湖").font(Fonts.display(26))
+                .overlay(PanelGesture { j.showPanel = true })
             Spacer()
             Button { j.screen = .codex } label: {
                 Text("秘籍").font(.system(size: 16, weight: .black)).foregroundStyle(Palette.ink)

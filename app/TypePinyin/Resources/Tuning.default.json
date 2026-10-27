@@ -101,8 +101,27 @@
   "probeFocusMisses": 2,
   "probeFocusExtra": 3,
   "speedWeight": 0.2,
-  "openingBattles": 3,
-  "openingTargetSeconds": 40,
-  "openingMinHP": 1
+  "openingBattles": 1,
+  "openingTargetSeconds": 80,
+  "openingMinHP": 1,
+  "openingProbesPerDuel": 0,
+  "earlyLengths": [
+   0.85,
+   0.15,
+   0,
+   0
+  ],
+  "middleLengths": [
+   0.55,
+   0.25,
+   0.2,
+   0
+  ],
+  "bossLengths": [
+   0,
+   0.4,
+   0.35,
+   0.25
+  ]
  }
 }

@@ -17,6 +17,7 @@ struct CodexView: View {
                 }
                 .buttonStyle(.plain)
                 Text("秘籍").font(Fonts.display(26))
+                    .overlay(PanelGesture { j.showPanel = true })
                 Spacer()
             }
             .padding(.horizontal, 16).frame(height: 56)

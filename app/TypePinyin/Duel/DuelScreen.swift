@@ -41,7 +41,11 @@ struct DuelScreen: View {
                     FinaleBanner().frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
                 NearMissLayer(trigger: c.nearMissToast)
-                if let t = c.tip {
+                if let g = c.guide {
+                    GuideBanner(title: g.title, line: g.line)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom).padding(.bottom, 12)
+                        .transition(.opacity)
+                } else if let t = c.tip {
                     TipBanner(text: t).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom).padding(.bottom, 14)
                         .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
@@ -93,6 +97,7 @@ struct DuelScreen: View {
         }
         .animation(.spring(duration: 0.3), value: c.finaleBanner)
         .animation(.easeOut(duration: 0.25), value: c.tip)
+        .animation(.easeOut(duration: 0.2), value: c.guide?.title)
         .animation(.spring(duration: 0.18, bounce: 0.4), value: c.killBanner)
         .animation(.easeOut(duration: 0.25), value: c.summary != nil)
         .sheet(isPresented: $showPanel) { TuningPanelView(c: c) }

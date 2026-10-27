@@ -149,6 +149,10 @@ final class DuelController {
         var foeName: String
         var foeTitle: String
         var robe: UIColor
+        /// 第一张牌是教学：不蓄力、键盘一个一个亮出该按的键、上面一条说明。
+        var guided = false
+        /// 对手丢一条命站起来时说的话（按丢命的顺序；空 = 通用的几句）。
+        var lifeLines: [String] = []
         /// 比武背景用哪片地区的长卷、第几站（nil = 切片的深蓝底）。
         var backdrop: (region: String, station: Int)?
         /// 引擎事件（入门提示用）。
@@ -171,6 +175,11 @@ final class DuelController {
     var summaryActions: [SummaryAction] = []
     /// 入门提示（旅程里第一次遇到时显示一句）。
     var tip: String?
+    /// 教学引导：第一张牌跟着亮起来的键按。说明跟着按键一步一步出：一句眼前这一步，必要时再加一句。
+    var guide: (title: String, line: String?)?
+    @ObservationIgnored private var guiding = false
+    /// 引导已经画到键盘上了（开打时键盘可能还没接上，接上后的第一帧补画）。
+    @ObservationIgnored private var guideOnKeyboard = false
 
     @ObservationIgnored private var engine: DuelEngine
     /// 旅程（调参面板「清空进度」用）。
@@ -208,6 +217,7 @@ final class DuelController {
         keyboard.onTouchDown = { [weak self] t in self?.latency.touchDown(t) }
         keyboard.expectedLetters = { [weak self] in self?.engine.expectedLetters ?? [] }
         keyboard.tuning = { [weak self] in self?.tuning ?? .standard }
+        if guiding { updateGuide() }
     }
 
     func start() {
@@ -232,7 +242,7 @@ final class DuelController {
         scene.setBackdrop(regionId: plan?.backdrop?.region, station: plan?.backdrop?.station ?? 0)
         scene.speed = 1 / Self.fxSlow            // -slowfx：人物动作也一起放慢
         scene.reset()
-        if tuning.groupFight && tuning.cardsOnTable <= 1 { scene.groupBegin() }
+        if (plan?.setup.groupFight ?? tuning.groupFight) && tuning.cardsOnTable <= 1 { scene.groupBegin() }
         summary = nil
         heat = 0
         moveMarks = []
@@ -250,6 +260,8 @@ final class DuelController {
         let ev = engine.start(at: CACurrentMediaTime())
         if AppResources.isUITest { setUITestOpponent() }
         if plan != nil && JourneyFlags.fast { engine.debugSetOpponentHP(12) }      // 跳过动画：一两招就打完
+        guiding = plan?.guided == true
+        if guiding { updateGuide() }
         apply(ev)
         sync()
         startLink()
@@ -374,6 +386,7 @@ final class DuelController {
     private func tick(_ l: CADisplayLink) {
         latency.frame(target: l.targetTimestamp, timestamp: l.timestamp)
         PerfLog.frame(at: l.timestamp, expected: l.targetTimestamp - l.timestamp, inReview: !reviews.isEmpty)
+        if guiding && !guideOnKeyboard { updateGuide() }
         let ev = PerfLog.measure("引擎推进") { engine.advance(to: CACurrentMediaTime()) }
         if !ev.isEmpty { PerfLog.measure("事件处理") { apply(ev) } }
         PerfLog.measure("同步界面") { sync() }
@@ -469,6 +482,7 @@ final class DuelController {
                 }
                 sounds.tick(typed - 1 + heat)
                 scene.letterTick()
+                if guiding { updateGuide() }
                 if case .card(let i) = target { dismissReview(slot: i) }      // 开始打下一个词：回顾让位
                 if case .card(let i) = target, engine.cards.indices.contains(i) {
                     let word = engine.cards[i].word
@@ -496,12 +510,13 @@ final class DuelController {
                     self.finaleBanner = false
                 }
             case .hint(let ch):
-                keyboard?.showHint(ch)
+                if !guiding { keyboard?.showHint(ch) }
             case .hintCleared:
-                keyboard?.showHint(nil)
+                if !guiding { keyboard?.showHint(nil) }
             case .comboChanged, .comboBroken:
                 updateHeat()
             case .strike(let i, let dmg, let flaw, let finisher, let heavy):
+                if guiding { endGuide() }
                 if finisher { finisherMoves.insert(engine.moveMarks.count - 1) }
                 scene.setCharge(1)
                 let letters = (lastStruck[i] ?? "").map(String.init)
@@ -571,7 +586,9 @@ final class DuelController {
                             self.scene.foeKneel()
                             Task { @MainActor in
                                 try? await Task.sleep(for: .seconds(0.9))
-                                self.scene.foeStandUp(line: Self.standUpLines.randomElement()!)
+                                let lost = max(0, self.engine.opponent.maxLives - livesLeft - 1)
+                                let own = self.plan?.lifeLines ?? []
+                                self.scene.foeStandUp(line: own.isEmpty ? Self.standUpLines.randomElement()! : own[min(lost, own.count - 1)])
                                 try? await Task.sleep(for: .seconds(0.25))
                                 self.knockdownHold = false
                             }
@@ -632,6 +649,47 @@ final class DuelController {
 
     /// 丢了一条命站起来时说的话。
     private static let standUpLines = ["还没完！", "有两下子！", "再来！", "好身手！"]
+
+    /// 教学引导：亮出第一张牌下一个该按的键、画左右手分界线；说明按打到哪一步来，一次只说一点。
+    private func updateGuide() {
+        guard guiding, let card = engine.cards.first else { return }
+        guide = Self.guideText(word: card.word, typed: card.typed.count)
+        let letters = Array(card.word.letters)
+        let next = card.typed.count < letters.count ? letters[card.typed.count] : nil
+        guard let keyboard else { guideOnKeyboard = false; return }
+        keyboard.guide = true
+        keyboard.showHint(next)
+        guideOnKeyboard = true
+    }
+
+    /// 第几步说什么：开头只说先按哪个；按了第一个才讲左右手，按了第二个再讲发黄；打完一个字换下一个字。
+    static func guideText(word: Word, typed k: Int) -> (title: String, line: String?) {
+        let letters = Array(word.letters)
+        guard k < letters.count else { return ("", nil) }
+        let next = String(letters[k])
+        let left = "qwertasdfgzxcvb".contains(letters[k])
+        let hand = left ? "左手" : "右手"
+        let area = "\(next) 在\(left ? "左" : "右")边区域，用\(hand)大拇指按"
+        let chars = Array(word.text)
+        let ends = word.syllables.reduce(into: [Int]()) { $0.append(($0.last ?? 0) + $1.count) }
+        if k == 0 { return ("打出「\(word.text)」：先按亮起来的 \(next)", nil) }
+        if let i = ends.firstIndex(of: k), i + 1 < chars.count {
+            return ("「\(chars[i])」打好了，接着打「\(chars[i + 1])」：\(next)（\(hand)）", nil)
+        }
+        switch k {
+        case 1: return ("下一个：\(next)（\(hand)）", "键盘分左右两半，\(area)")
+        case 2: return ("下一个：\(next)（\(hand)）", area)
+        default: return ("下一个：\(next)（\(hand)）", nil)
+        }
+    }
+
+    private func endGuide() {
+        guiding = false
+        guideOnKeyboard = false
+        guide = nil
+        keyboard?.guide = false
+        keyboard?.showHint(nil)
+    }
 
     private func strikeLanded() {
         strikesInFlight = max(0, strikesInFlight - 1)

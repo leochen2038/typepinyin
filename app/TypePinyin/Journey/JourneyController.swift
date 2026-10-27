@@ -15,6 +15,8 @@ final class JourneyController {
         case map
         case codex
         case harvest
+        /// 梦醒：一句话，然后走到葫芦集。
+        case wake
     }
 
     var screen: Screen = .map
@@ -47,7 +49,11 @@ final class JourneyController {
         var gains: [String]
         var won: Bool
         var finished: Bool          // 走完了这片地区（打赢掌门）
+        var replay = false          // 通关后再进的随机一场
     }
+
+    /// 这一趟是通关后再进的随机一场。
+    var isReplay: Bool { route?.stations.count == 1 && progress.regions[route?.regionId ?? ""]?.phase == .cleared }
 
     // 这次打开的收获（「收功」用）
     @ObservationIgnored var sessionStartChars = 0
@@ -57,6 +63,8 @@ final class JourneyController {
     var learner: Learner
     /// 存档读不出、从头开始了：提示一次。
     var showRecoveredNotice = false
+    /// 调参面板（地图、长卷、秘籍页的标题连点三下）。
+    var showPanel = false
 
     let content: LearningContent
     let duel: DuelController
@@ -87,10 +95,10 @@ final class JourneyController {
         duel.journey = self
     }
 
-    /// 一打开去哪：没打完初入江湖就接着打，没拿到《基本功》就去十里坡，否则回江湖。
+    /// 一打开去哪：没打完初入江湖就接着打，没拿到《基本功》就去葫芦集，否则回江湖。
     func startScreen() -> Screen {
         if !progress.journey.openingDone { return .opening(battle: progress.journey.openingBattle) }
-        if progress.volumes["base"]?.obtained != true { return .region("shilipo") }
+        if progress.volumes["base"]?.obtained != true { return .region("huluji") }
         return .map
     }
 
@@ -143,10 +151,13 @@ extension JourneyController {
 
     /// 排一场比武：出字器、单场设置、对手；打完回调 done（交回小结和学习变化）。
     func planDuel(volume: String?, foe: Fighter, minHP: Int = 0, targetSeconds: Double? = nil, lives: Int? = nil,
-                  boss: Bool = false, backdrop: (region: String, station: Int)? = nil,
+                  boss: Bool = false, backdrop: (region: String, station: Int)? = nil, probeLimit: Int = 3,
+                  lengths: [Int: Double] = [2: 1], group: Bool = false, allowed: Set<String>? = nil,
+                  pool: [ContentWord]? = nil, guided: Bool = false, firstWord: ContentWord? = nil,
                   done: @escaping (DuelSummary, LearnerChange) -> Void) {
         let dealer = Dealer(content: content, learner: learner, probe: probeState,
-                            context: DealContext(volume: volume, today: today, newToday: newTodaySoFar),
+                            context: DealContext(volume: volume, today: today, newToday: newTodaySoFar, probeLimit: probeLimit, lengths: lengths,
+                                                 allowedSyllables: allowed, pool: pool, firstWord: firstWord),
                             seed: UInt64(Date().timeIntervalSince1970 * 1000) & 0xFFFF_FFFF)
         let source = JourneyCardSource(dealer: dealer) { [weak self] v in self?.rank(of: v) ?? 0 }
         var setup = DuelSetup()
@@ -156,10 +167,13 @@ extension JourneyController {
         setup.minHP = minHP
         setup.lives = lives ?? 1
         setup.bossPressure = boss
+        setup.groupFight = group
+        setup.firstCardFree = guided
         setup.day = today
         duel.plan = DuelController.DuelPlan(
             bank: AppResources.journeyBank, setup: setup, source: source,
-            foeName: foe.name, foeTitle: foe.title, robe: UIColor(hexString: foe.look.robe), backdrop: backdrop,
+            foeName: foe.name, foeTitle: foe.title, robe: UIColor(hexString: foe.look.robe), guided: guided, lifeLines: foe.lifeLines ?? [],
+            backdrop: backdrop,
             onEvent: { [weak self] e in self?.handleTipEvent(e) },
             onFinish: { [weak self] summary, attempts, spl in
                 guard let self else { return }
@@ -200,7 +214,11 @@ extension JourneyController {
     func handleTipEvent(_ e: DuelEvent) {
         let tip: JourneyTip?
         switch e {
-        case .started: tip = .firstCard
+        case .started: tip = duel.plan?.guided == true ? nil : .firstCard
+            if duel.plan?.guided == true { markTipSeen(.firstCard) }
+        case .strike:                                         // 教学那张牌打完了才算学过
+            tip = nil
+            if duel.plan?.guided == true { markTipSeen(.guide) }
         case .pressureStarted: tip = .firstPressure
         case .newMove: tip = .firstNewMove
         default: tip = nil
@@ -213,6 +231,15 @@ extension JourneyController {
         save(ch)
         tipQueue.append(tip.text)
         if duel.tip == nil { showNextTip() }
+    }
+
+    func markTipSeen(_ t: JourneyTip) {
+        guard !progress.journey.tipsSeen.contains(t.rawValue) else { return }
+        var j = progress.journey
+        j.tipsSeen.insert(t.rawValue)
+        var ch = ProgressChange()
+        ch.journey = j
+        save(ch)
     }
 
     /// 提示一条一条来，每条停 4 秒（第一张牌和第一次蓄力几乎同时到，不能互相盖掉）。
@@ -229,12 +256,14 @@ extension JourneyController {
 
     // MARK: 初入江湖
 
-    /// 开打初入江湖的第 n 场（从 0 起）。
+    /// 初入江湖：一场梦。梦里和妙笔书生过招（两条命、打不输），牌是专门挑的好打的常用词。
     func startOpening(_ n: Int) {
-        let foes = content.place("chuRuJiangHu")?.foes ?? []
-        guard !foes.isEmpty else { return }
+        guard let dream = content.dream else { return }
         let t = duel.tuning.learning
-        planDuel(volume: nil, foe: foes[n % foes.count], minHP: t.openingMinHP, targetSeconds: t.openingTargetSeconds) { [weak self] _, change in
+        planDuel(volume: nil, foe: dream.boss, minHP: t.openingMinHP, targetSeconds: t.openingTargetSeconds, lives: 2,
+                 backdrop: ("dream", 0), probeLimit: 0, lengths: [2: 0.75, 3: 0.25], pool: dream.words,
+                 guided: !progress.journey.openingDone,                               // 梦没打完，每次开打都先教一遍
+                 firstWord: progress.journey.openingDone ? nil : dream.tutorial) { [weak self] _, change in
             guard let self else { return }
             var j = self.progress.journey
             j.openingBattle = n + 1
@@ -247,9 +276,9 @@ extension JourneyController {
             let go: @MainActor () -> Void = { [weak self] in
                 guard let self else { return }
                 self.duelToken += 1
-                if last { self.enterRegion("shilipo") } else { self.screen = .opening(battle: n + 1) }
+                self.screen = last ? .wake : .opening(battle: n + 1)
             }
-            self.duel.summaryActions = [.init(label: last ? "走向十里坡" : "继续", primary: true, action: go)]
+            self.duel.summaryActions = [.init(label: last ? "醒来" : "继续", primary: true, action: go)]
             self.autoAdvance { _ in go() }
         }
     }
@@ -272,12 +301,17 @@ extension JourneyController {
             route = r
             stationIndex = s.stationIndex
             introPending = false
+        } else if state?.phase == .cleared {
+            // 通关以后再进：不走地图，随机来一场掌门、奇遇、单挑或群战
+            route = RoutePlanner.replay(region: region, content: content, seed: UInt64(Date().timeIntervalSince1970 * 1000) & 0xFFFF_FFFF)
+            stationIndex = 0
+            introPending = false
         } else {
             let r = RoutePlanner.plan(region: region, content: content, seed: UInt64(Date().timeIntervalSince1970 * 1000) & 0xFFFF_FFFF)
             route = r
             stationIndex = 0
-            introPending = (state?.phase ?? .untouched) == .untouched
-            saveRegion(id, phase: state?.phase == .cleared ? .cleared : .inProgress)
+            introPending = true
+            saveRegion(id, phase: .inProgress)
         }
         pendingCard = nil
         walkFrom = nil
@@ -310,8 +344,13 @@ extension JourneyController {
     func startStationDuel() {
         guard let region = currentRegion, let st = currentStation, let foe = st.foe else { return }
         let boss = st.kind == .boss
+        // 由短到长：前两站二字为主，中间二到四字，掌门三到五字
+        let t = learner.tuning
+        let lengths = LearningTuning.lengthMap(boss ? t.bossLengths : stationIndex < 2 ? t.earlyLengths : t.middleLengths)
+        // 第一关的牌只许用第一卷的 30 个音节（不管奇遇里碰到过什么）
+        let allowed: Set<String>? = region.volume == "base" ? Volumes.baseCore : nil
         planDuel(volume: region.volume, foe: foe, lives: boss ? 3 : 1, boss: boss,
-                 backdrop: (region.id, stationIndex)) { [weak self] summary, change in
+                 backdrop: (region.id, stationIndex), lengths: lengths, group: st.kind == .group, allowed: allowed) { [weak self] summary, change in
             self?.stationDone(won: summary.won, summary: summary, change: change)
         }
     }
@@ -337,6 +376,11 @@ extension JourneyController {
     /// 奇遇的「接着走」。
     func leaveEncounter() {
         guard let region = currentRegion else { return }
+        if isReplay {
+            pendingCard = PendingCard(summary: nil, title: "奇遇打完了", gains: [], won: true, finished: true, replay: true)
+            regionStage = .scroll
+            return
+        }
         stationIndex += 1
         saveRegion(region.id, phase: progress.regions[region.id]?.phase == .cleared ? .cleared : .inProgress)
         walkFrom = stationIndex - 1
@@ -346,6 +390,14 @@ extension JourneyController {
     /// 一站比武打完：赢了往前走一站（掌门打赢就拿到这一卷），输了重打这一站。
     func stationDone(won: Bool, summary: DuelSummary, change: LearnerChange) {
         guard let region = currentRegion, let st = currentStation else { return }
+        if isReplay {                                          // 随机一场：打完可以再来一场或回江湖，不动地图进度
+            checkRankUps()
+            pendingCard = PendingCard(summary: summary, title: won ? "打赢了\(st.foe?.name ?? "")" : "再来一次",
+                                      gains: gains(change), won: won, finished: won, replay: true)
+            regionStage = .scroll
+            autoAdvance { j in j.screen = .map }
+            return
+        }
         var finished = false
         if won {
             stationIndex += 1
@@ -398,6 +450,7 @@ extension JourneyController {
         guard let card = pendingCard else { return }
         pendingCard = nil
         if !card.won { enterStation(); return }               // 再来一次：重打这一站
+        if card.replay, let id = route?.regionId { enterRegion(id); return }   // 随机一场：再来一场
         if card.finished { screen = .map; return }            // 走完了：回江湖
         walkFrom = stationIndex - 1
     }

@@ -10,7 +10,7 @@ struct JourneyRoot: View {
             switch j.screen {
             case .opening(let n):
                 if n == 0 && !j.openingLineShown {
-                    OpeningView(line: j.content.place("chuRuJiangHu")?.intro ?? "江湖路远，从这里出发。") {
+                    OpeningView(line: j.content.dream?.intro ?? "江湖路远，从这里出发。", button: "接招") {
                         j.openingLineShown = true
                     }
                 } else {
@@ -36,12 +36,15 @@ struct JourneyRoot: View {
                 }
             case .harvest:
                 HarvestView(j: j)
+            case .wake:
+                OpeningView(line: j.content.dream?.outro ?? "江湖路远，从这里出发。", button: "出发") { j.enterRegion("huluji") }
             case .map:
                 WorldMapView(j: j)
             case .codex:
                 CodexView(j: j)
             }
         }
+        .sheet(isPresented: $j.showPanel) { TuningPanelView(c: j.duel) }
         .alert("进度没读到，从头开始", isPresented: $j.showRecoveredNotice) {
             Button("好", role: .cancel) {}
         }

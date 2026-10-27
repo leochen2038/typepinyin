@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 云雾：拿到《基本功》之前盖住十里坡往上的整张网；拿到后第一次回地图时一起散开。
+/// 云雾：拿到《基本功》之前盖住葫芦集往上的整张网；拿到后第一次回地图时一起散开。
 struct FogLayer: View {
     let clearing: Bool
 
