@@ -172,13 +172,27 @@ struct TuningPanelView: View {
                     Toggle("音效", isOn: Binding(get: { c.sounds.soundOn }, set: { c.sounds.soundOn = $0 }))
                 }
                 Section {
+                    Picker("攒气倍数", selection: $t.qiMultiplier) {
+                        ForEach([1.0, 2, 3, 5, 10, 20], id: \.self) { m in Text("\(Int(m)) 倍").tag(m) }
+                    }
+                } header: {
+                    Text("必杀（测试用，下一场生效）")
+                } footer: {
+                    Text("气攒得快，必杀来得勤，用来看气满、光点飞到牌上、必杀演出和群战打全场。5 倍大约两张牌气满，20 倍一张牌就满。平时放 1 倍。")
+                }
+                Section {
                     Toggle("群战", isOn: $t.groupFight)
                     Stepper("场上最多几个人：\(t.groupSize)", value: $t.groupSize, in: 1...3)
                     Stepper("一共几个人：\(t.groupTotal)", value: $t.groupTotal, in: 2...9)
+                    Picker("必杀怎么打全场", selection: $t.groupFinisherStyle) {
+                        Text("横扫剑气").tag(0)
+                        Text("连斩").tag(1)
+                        Text("旋身").tag(2)
+                    }
                 } header: {
                     Text("群战（试玩，下一场生效）")
                 } footer: {
-                    Text("打完一张牌自动打蓄力最多的那个并打断它的蓄力，必杀打全场；倒下一个补一个，最后一个是头目。")
+                    Text("打完一张牌自动打蓄力最多的那个并打断它的蓄力，必杀打全场；倒下一个补一个，最后一个是头目。必杀的画面：横扫剑气是最后一刀扫过全场；连斩是闪身到每个人面前砍；旋身是冲进人群转一圈、剑光往外扩。")
                 }
                 Section {
                     Picker("对手有几条命", selection: $t.foeLives) {

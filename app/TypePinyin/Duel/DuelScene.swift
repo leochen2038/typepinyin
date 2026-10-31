@@ -376,6 +376,10 @@ final class DuelScene: SKScene {
     func heroStrike(labels: [String], damage: Int, heavy: Bool, flaw: Bool, finisher: Bool, lethal: Bool = false, combo: Int, minGap: Double = 0.075, onHit: @escaping (Int) -> Void) -> [Double] {
         guard let p = player, let f = foe else { return [0] }
         let chars = labels
+        if finisher && groupMode && !reducedMotion && !group.isEmpty {
+            let per = chars.count <= 5 ? 0.1 : max(minGap, 0.6 / Double(chars.count))
+            return groupFinisher(chars: chars, damage: damage, per: per, onHit: onHit)
+        }
         let n = max(1, chars.count)
         // 冲到剑尖刚好够到对手身体的地方停下（剑长 124），不冲进对手怀里叠在一起
         let gap = f.position.x - p.position.x - 118 * p.yScale
@@ -401,10 +405,13 @@ final class DuelScene: SKScene {
                 let last = k == times.count - 1
                 PerfLog.measure("出刀剑光") { self.slash(char: ch, index: k, color: color, big: last) }
                 self.foe?.hurt(reduced: self.reducedMotion)
+                if finisher && self.groupMode { self.groupHurtAll() }       // 群战：必杀每一刀都打全场
                 if last {
                     self.burst(damage: damage, big: heavy || flaw || finisher || combo >= 8, gold: combo >= 8, red: combo >= 15)
+                    if finisher && self.groupMode {                          // 其余的人头上也各爆一个
+                        for n in self.groupOthers { self.burst(on: n, damage: damage, big: true, gold: false, red: false) }
+                    }
                     if self.heat >= 2 { self.inkSplash() }
-                    if finisher && self.groupMode { self.groupHurtAll() }   // 群战：必杀打全场
                     if finisher || lethal {
                         self.finisherImpact()           // 必杀和打空对手血条的那一刀：顿帧、白闪、大交叉、击飞
                     } else {
@@ -467,6 +474,13 @@ final class DuelScene: SKScene {
     /// 必杀落下：顿帧、全屏白闪、对手身上斩出大交叉、重震、对手被击飞；之后场地亮回来，主角收刀。
     private func finisherImpact() {
         guard let f = foe else { return }
+        impactFlash()
+        crossAndKnockBack(f)
+        if groupMode { for n in groupOthers { crossAndKnockBack(n) } }   // 减少动态效果时的群战必杀：一起挨
+    }
+
+    /// 必杀落下时全场的那一下：顿帧、白闪、重震；之后场地亮回来，主角收刀。
+    private func impactFlash() {
         hitStop(0.18)
         let flash = SKSpriteNode(color: .white, size: size)
         flash.anchorPoint = .zero
@@ -474,6 +488,16 @@ final class DuelScene: SKScene {
         flash.alpha = 0.85
         addChild(flash)
         flash.run(.sequence([.fadeOut(withDuration: 0.3), .removeFromParent()]))
+        shake(amount: 12)
+        run(.wait(forDuration: 0.35)) { [weak self] in
+            guard let self else { return }
+            self.childNode(withName: "dim")?.run(.sequence([.fadeOut(withDuration: 0.3), .removeFromParent()]))
+            self.player?.sheathe()
+        }
+    }
+
+    /// 打在一个人身上的大交叉剑光，人往后一退再回来（dir = 1 往右退，-1 往左退）。
+    private func crossAndKnockBack(_ f: FigureNode, dir: CGFloat = 1) {
         let c = CGPoint(x: f.position.x - 10 * f.yScale, y: f.position.y + 90 * f.yScale)
         let len = 300 * f.yScale
         for angle in [0.75, -0.75] as [CGFloat] {
@@ -495,13 +519,8 @@ final class DuelScene: SKScene {
             fx.addChild(line)
             line.run(.sequence([.scaleX(to: 1, duration: 0.08), .wait(forDuration: 0.15), .fadeOut(withDuration: 0.35), .removeFromParent()]))
         }
-        shake(amount: 12)
-        f.run(.sequence([.moveBy(x: 40, y: 0, duration: 0.1), .wait(forDuration: 0.1), .moveBy(x: -40, y: 0, duration: 0.35)]))
-        run(.wait(forDuration: 0.35)) { [weak self] in
-            guard let self else { return }
-            self.childNode(withName: "dim")?.run(.sequence([.fadeOut(withDuration: 0.3), .removeFromParent()]))
-            self.player?.sheathe()
-        }
+        let back: CGFloat = 40 * dir
+        f.run(.sequence([.moveBy(x: back, y: 0, duration: 0.1), .wait(forDuration: 0.1), .moveBy(x: -back, y: 0, duration: 0.35)]))
     }
 
     private func arcNode(color: UIColor, r: CGFloat) -> SKNode {
@@ -584,9 +603,9 @@ final class DuelScene: SKScene {
     private var textureOffset: [String: CGPoint] = [:]
 
     /// 一刀剑光：一道弧线，弧线中间写出这一刀对应的字母。
-    private func slash(char: String, index: Int, color: UIColor, big: Bool = false) {
-        guard let f = foe else { return }
-        let c = CGPoint(x: f.position.x - 10 * f.yScale, y: f.position.y + 95 * f.yScale)
+    private func slash(char: String, index: Int, color: UIColor, big: Bool = false, around: FigureNode? = nil, offsetX: CGFloat = 0) {
+        guard let f = around ?? foe else { return }
+        let c = CGPoint(x: f.position.x - 10 * f.yScale + offsetX, y: f.position.y + 95 * f.yScale)
         let r: CGFloat = 70 * f.yScale
         let flip: CGFloat = index % 2 == 0 ? 1 : -1
         let arc = arcNode(color: color, r: r)
@@ -709,7 +728,7 @@ final class DuelScene: SKScene {
         group[id] = f
         groupSlots[id] = slot
         groupTiers[id] = tier
-        // 头上一块小牌子：上面金色的是蓄力，下面一条红线是血
+        // 头上一块小牌子：上面一条红的是血，下面金色的是蓄力（跟状态栏里主角的血条在上、气条在下一样）
         let bg = SKSpriteNode(color: .white, size: CGSize(width: 52, height: 13))
         bg.zPosition = 30
         let edge = SKShapeNode(rectOf: CGSize(width: 52, height: 13))
@@ -717,14 +736,14 @@ final class DuelScene: SKScene {
         edge.lineWidth = 2
         edge.fillColor = .clear
         bg.addChild(edge)
-        let fill = SKSpriteNode(color: Palette.uiGold, size: CGSize(width: 48, height: 5))
+        let fill = SKSpriteNode(color: Palette.uiGold, size: CGSize(width: 48, height: 4))
         fill.anchorPoint = CGPoint(x: 0, y: 0.5)
-        fill.position = CGPoint(x: -24, y: 2)
+        fill.position = CGPoint(x: -24, y: -2.5)
         fill.xScale = 0.001
         bg.addChild(fill)
-        let hp = SKSpriteNode(color: Palette.uiRed, size: CGSize(width: 48, height: 3))
+        let hp = SKSpriteNode(color: Palette.uiRed, size: CGSize(width: 48, height: 4))
         hp.anchorPoint = CGPoint(x: 0, y: 0.5)
-        hp.position = CGPoint(x: -24, y: -3.5)
+        hp.position = CGPoint(x: -24, y: 2.5)
         bg.addChild(hp)
         fx.addChild(bg)
         groupBars[id] = (bg, fill, hp)
@@ -745,8 +764,163 @@ final class DuelScene: SKScene {
     /// 出刀前：主角冲向谁（剑光、击飞都对着它）。
     func groupFocus(_ id: Int) { if let f = group[id] { foe = f } }
 
+    /// 群战的必杀：谁挨打都要看得出是被什么打中的（groupFinisherStyle：0 横扫剑气、1 连斩、2 旋身）。
+    /// 返回每一刀的时刻（回顾牌按它爆字母）；最后一刀的回调放在全场都挨完之后，倒下、补位从那时开始演。
+    var groupFinisherStyle = 0
+
+    private func groupFinisher(chars: [String], damage: Int, per: Double, onHit: @escaping (Int) -> Void) -> [Double] {
+        guard let p = player else { return [0] }
+        let n = max(1, chars.count)
+        let pre = 0.5
+        finisherCharge()
+        let targets = group.values.sorted { $0.position.x < $1.position.x }      // 从近到远
+        let home = p.position.x
+        let red = Palette.uiRed
+        func hit(_ t: FigureNode, dir: CGFloat = 1) {
+            t.hurt(reduced: false)
+            burst(on: t, damage: damage, big: true, gold: false, red: false)
+            crossAndKnockBack(t, dir: dir)
+        }
+        func reach(_ t: FigureNode) -> CGFloat { t.position.x - 118 * p.yScale }   // 剑尖刚好够到这个人的位置
+        var times: [Double]
+        var lastAt: Double                                                          // 最后一刀回调的时刻（全场挨完）
+        switch groupFinisherStyle {
+        case 1:
+            // 乙 连斩：几刀平均分给每个人，主角从近到远闪身到每个人面前砍，砍完回原位
+            let per = max(per, 0.09)
+            let m = targets.count
+            let owner = (0..<n).map { min(m - 1, $0 * m / n) }
+            times = FigureNode.slashTimes(slashes: n, per: per).map { $0 + pre }
+            run(.wait(forDuration: pre)) { _ = p.dashAndSlash(distance: 0, slashes: n, per: per, reduced: false) }   // 只要挥剑的动作
+            for j in 0..<m {
+                guard let first = owner.firstIndex(of: j) else { continue }
+                let x = reach(targets[j])
+                run(.wait(forDuration: max(0, times[first] - 0.08))) {
+                    let hop = SKAction.moveTo(x: x, duration: 0.06)
+                    hop.timingMode = .easeOut
+                    p.run(hop)
+                }
+            }
+            for k in 0..<n {
+                let j = owner[k]
+                let lastOfOwner = k == n - 1 || owner[k + 1] != j
+                run(.wait(forDuration: times[k])) { [weak self] in
+                    guard let self else { return }
+                    self.foe = targets[j]
+                    self.slash(char: chars[k], index: k, color: red, big: lastOfOwner, around: targets[j])
+                    if lastOfOwner { hit(targets[j]) } else { targets[j].hurt(reduced: false) }
+                    if k == n - 1 { self.impactFlash() }
+                    onHit(k)
+                }
+            }
+            lastAt = times[n - 1]
+            run(.wait(forDuration: lastAt + 0.12)) {
+                let back = SKAction.moveTo(x: home, duration: 0.2)
+                back.timingMode = .easeInEaseOut
+                p.run(back)
+            }
+        case 2:
+            // 丙 旋身：冲进人群中间，边砍边转身；最后一刀一圈剑光往外扩，碰到谁谁挨打、往外推开
+            let mid = ((targets.first?.position.x ?? home) + (targets.last?.position.x ?? home)) / 2 - 30 * p.yScale
+            times = FigureNode.slashTimes(slashes: n, per: per).map { $0 + pre }
+            let facing = p.xScale
+            run(.wait(forDuration: pre)) { _ = p.dashAndSlash(distance: mid - home, slashes: n, per: per, reduced: false) }
+            for k in 0..<(n - 1) {
+                run(.wait(forDuration: times[k])) { [weak self] in
+                    guard let self else { return }
+                    p.xScale = k % 2 == 0 ? -facing : facing                        // 一刀转一次身
+                    self.slash(char: chars[k], index: k, color: red, around: p, offsetX: (k % 2 == 0 ? -60 : 60) * p.yScale)
+                    onHit(k)
+                }
+            }
+            let ringTime = 0.22
+            let maxDist = targets.map { abs($0.position.x - mid) }.max() ?? 1
+            run(.wait(forDuration: times[n - 1])) { [weak self] in
+                guard let self else { return }
+                p.xScale = facing
+                self.slash(char: chars[n - 1], index: n - 1, color: red, big: true, around: p)
+                let ring = SKShapeNode(circleOfRadius: 20)
+                ring.strokeColor = red
+                ring.lineWidth = 10
+                let core = SKShapeNode(circleOfRadius: 20)
+                core.strokeColor = .white
+                core.lineWidth = 3
+                ring.addChild(core)
+                ring.position = CGPoint(x: p.position.x, y: p.position.y + 90 * p.yScale)
+                ring.zPosition = 11
+                self.fx.addChild(ring)
+                let grow = (maxDist + 60) / 20
+                ring.run(.sequence([.scale(to: grow, duration: ringTime), .fadeOut(withDuration: 0.15), .removeFromParent()]))
+                for t in targets {
+                    let d = abs(t.position.x - mid) / max(1, maxDist) * ringTime
+                    self.run(.wait(forDuration: d)) { hit(t, dir: t.position.x >= mid ? 1 : -1) }
+                }
+            }
+            lastAt = times[n - 1] + ringTime
+            run(.wait(forDuration: lastAt)) { [weak self] in
+                self?.impactFlash()
+                onHit(n - 1)
+            }
+        default:
+            // 甲 横扫：前面几刀砍最近的那个；最后一刀一道剑气从左往右扫过全场，扫到谁谁挨打
+            guard let near = targets.first else { return [0] }
+            foe = near
+            times = FigureNode.slashTimes(slashes: n, per: per).map { $0 + pre }
+            run(.wait(forDuration: pre)) { _ = p.dashAndSlash(distance: max(0, reach(near) - home), slashes: n, per: per, reduced: false) }
+            for k in 0..<(n - 1) {
+                run(.wait(forDuration: times[k])) { [weak self] in
+                    guard let self else { return }
+                    self.slash(char: chars[k], index: k, color: red, around: near)
+                    near.hurt(reduced: false)
+                    onHit(k)
+                }
+            }
+            let sweepTime = 0.22
+            run(.wait(forDuration: times[n - 1])) { [weak self] in
+                guard let self else { return }
+                self.slash(char: chars[n - 1], index: n - 1, color: red, big: true, around: near)
+                let y = near.position.y + 95 * near.yScale
+                let startX = reach(near) + 40 * p.yScale, endX = self.size.width + 80
+                let len: CGFloat = 220
+                let path = CGMutablePath()
+                path.move(to: CGPoint(x: -len / 2, y: 0)); path.addLine(to: CGPoint(x: len / 2, y: 0))
+                let blade = SKShapeNode(path: path)
+                blade.strokeColor = red
+                blade.lineWidth = 16
+                blade.lineCap = .round
+                let core = SKShapeNode(path: path)
+                core.strokeColor = .white
+                core.lineWidth = 5
+                core.lineCap = .round
+                blade.addChild(core)
+                blade.position = CGPoint(x: startX, y: y)
+                blade.zRotation = 0.12
+                blade.zPosition = 11
+                blade.xScale = 0.3
+                self.fx.addChild(blade)
+                blade.run(.sequence([.group([.moveTo(x: endX, duration: sweepTime), .scaleX(to: 1, duration: 0.08)]),
+                                     .fadeOut(withDuration: 0.1), .removeFromParent()]))
+                for t in targets {
+                    let d = Double(max(0, t.position.x - startX) / max(1, endX - startX)) * sweepTime
+                    self.run(.wait(forDuration: d)) { hit(t) }
+                }
+            }
+            lastAt = times[n - 1] + sweepTime
+            run(.wait(forDuration: lastAt)) { [weak self] in
+                self?.impactFlash()
+                onHit(n - 1)
+            }
+        }
+        run(.wait(forDuration: lastAt)) { [weak self] in self?.setCharge(0) }
+        times[n - 1] = lastAt
+        return times
+    }
+
+    /// 群战里除了正对着的那个，场上其余的人。
+    private var groupOthers: [FigureNode] { group.values.filter { $0 !== foe } }
+
     /// 必杀打全场：除了正对着的那个，其余的也挨一下。
-    func groupHurtAll() { for n in group.values where n !== foe { n.hurt(reduced: reducedMotion) } }
+    func groupHurtAll() { for n in groupOthers { n.hurt(reduced: reducedMotion) } }
 
     func groupAttack(_ id: Int) {
         group[id]?.attack(distance: 40, heavy: groupTiers[id] == 2, reduced: reducedMotion)
@@ -776,8 +950,8 @@ final class DuelScene: SKScene {
         foe?.stunned(false)
     }
 
-    private func burst(damage: Int, big: Bool, gold: Bool, red: Bool) {
-        guard let f = foe else { return }
+    private func burst(on target: FigureNode? = nil, damage: Int, big: Bool, gold: Bool, red: Bool) {
+        guard let f = target ?? foe else { return }
         let node = SKShapeNode(path: SVGPath.parse(FigureArt.burst))
         node.fillColor = red ? Palette.uiRed : Palette.uiGold
         node.strokeColor = Palette.uiInk

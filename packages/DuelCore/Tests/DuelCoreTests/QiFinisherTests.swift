@@ -12,6 +12,19 @@ import Testing
         #expect(e.player.qi == 15)
     }
 
+    /// 攒气倍数（测试用）：5 倍时一招攒的气是平时的 5 倍。
+    @Test func qiMultiplierSpeedsUpQi() {
+        func qi(_ m: Double) -> Int {
+            var t = Fixture.hpMode
+            t.qiMultiplier = m
+            let e = Fixture.engine(features: [.qi], tuning: t)
+            FakeClock().type(e, "pengyou")
+            return e.player.qi
+        }
+        #expect(qi(1) > 0)
+        #expect(qi(5) == 5 * qi(1))
+    }
+
     /// 默认按血量打：打空对手血条才赢，气条开着。
     @Test func defaultsEndByHPWithQi() {
         #expect(Tuning.standard.movesPerDuel == 0)

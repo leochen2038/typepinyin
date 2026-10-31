@@ -87,6 +87,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             if case .letter(let c) = h { zoneGlow = side(c) }
         }
         applyZones()
+        if let c = thumbFor { thumbFor = nil; showThumb(c) }
     }
 
     /// 左手打的字母（两拇指打字时以 t/g/b 和 y/h/n 之间为界）。
@@ -133,6 +134,66 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
         divider.lineDashPattern = [5, 4]
         divider.isHidden = !on
         if divider.superlayer == nil { layer.insertSublayer(divider, at: 0) }
+    }
+
+    // MARK: 教学：拇指动画
+
+    private let thumb = ThumbView()
+    private var thumbFor: Character?
+    private var thumbLeft = false
+
+    /// 教学：该按的键上停着一只半透明的白色大拇指，指尖点着这个键，慢慢呼吸（轻按、松开）；
+    /// 换键时滑过去，不从屏幕外飞进来。右边的键用右手（指尖朝左上），左边的用左手（镜像）。传 nil 收起。
+    func showThumb(_ c: Character?) {
+        guard c != thumbFor else { return }
+        thumbFor = c
+        guard let c, let key = keyViews[.letter(c)], let isLeft = side(c) else {
+            thumb.content.removeAllAnimations()
+            UIView.animate(withDuration: 0.2) { self.thumb.alpha = 0 }
+            return
+        }
+        let tip = CGPoint(x: key.frame.midX + (isLeft ? -5 : 5), y: key.frame.midY + 7)   // 指尖压在键的右下（左手左下），字母露出来
+        let turn = CGAffineTransform(rotationAngle: ThumbView.lean)            // 从右下角斜着伸上来
+        let pose = isLeft ? CGAffineTransform(scaleX: -1, y: 1).rotated(by: ThumbView.lean) : turn   // 左手：镜像，从左下角
+        let fresh = thumb.superview == nil || thumb.alpha == 0
+        let switchHands = !fresh && thumbLeft != isLeft
+        thumbLeft = isLeft
+        if thumb.superview == nil { addSubview(thumb) }
+        bringSubviewToFront(thumb)
+        thumb.content.removeAllAnimations()
+        if fresh {
+            thumb.transform = pose
+            thumb.center = tip
+            UIView.animate(withDuration: 0.3) { self.thumb.alpha = 1 }
+        } else if switchHands {                                 // 换手：这只淡出，那只在新键上淡入（不做镜像翻转的过渡）
+            UIView.animate(withDuration: 0.15, delay: 0, options: .beginFromCurrentState, animations: { self.thumb.alpha = 0 }) { _ in
+                guard self.thumbLeft == isLeft else { return }
+                self.thumb.transform = pose
+                self.thumb.center = tip
+                UIView.animate(withDuration: 0.25) { self.thumb.alpha = 1 }
+            }
+        } else {
+            UIView.animate(withDuration: 0.35, delay: 0, options: [.curveEaseInOut, .beginFromCurrentState]) {
+                self.thumb.transform = pose
+                self.thumb.center = tip
+                self.thumb.alpha = 1
+            }
+        }
+        // 呼吸：一轮 2.4 秒，轻轻按下去（缩一点、更实）再松开
+        let breathe = CABasicAnimation(keyPath: "transform.scale")
+        breathe.fromValue = 1.0
+        breathe.toValue = 0.9
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = 0.62
+        fade.toValue = 0.85
+        let group = CAAnimationGroup()
+        group.animations = [breathe, fade]
+        group.duration = 1.2
+        group.autoreverses = true
+        group.repeatCount = .infinity
+        group.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        group.beginTime = CACurrentMediaTime() + 0.35
+        thumb.content.add(group, forKey: "breathe")
     }
 
     /// 某个字母键的中心点（键盘自己的坐标）。
@@ -329,4 +390,86 @@ final class KeyCapView: UIView {
         backgroundColor = Palette.uiGold.withAlphaComponent(0.6)
         UIView.animate(withDuration: 0.25, delay: 0.05) { self.backgroundColor = old }
     }
+}
+
+/// 教学用的大拇指，照双手拇指打字的样子画：先画一只竖着的右手拇指（指尖朝上、锚点在指尖），
+/// 摆放时整只转成从右下角斜着伸上来。拇指短而粗（跟一个键差不多宽），指尖上一个宽的椭圆指甲，
+/// 关节只有一道褶、轮廓不鼓；下面连着手：上沿往外撑到手背，下沿顺着掌根往下。白色、细描边，整体半透明。
+final class ThumbView: UIView {
+    /// 呼吸动画加在这一层上（不碰视图本身的旋转、镜像）。
+    let content = CALayer()
+
+    static let size = CGSize(width: 170, height: 180)
+    static let tip = CGPoint(x: 70, y: 0)
+    /// 摆放时转多少（右手；左手镜像）：拇指斜着朝左上。
+    static let lean: CGFloat = -0.85
+
+    override init(frame: CGRect) {
+        super.init(frame: CGRect(origin: .zero, size: Self.size))
+        isUserInteractionEnabled = false
+        alpha = 0
+        layer.anchorPoint = CGPoint(x: Self.tip.x / Self.size.width, y: 0)
+        let o = Self.tip
+        func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: o.x + x, y: o.y + y) }
+
+        // 轮廓（以指尖为原点）：圆头 → 左边（掌根那侧）往下 → 底边 → 右边（手背那侧）往上回到圆头
+        let r: CGFloat = 19
+        let shape = UIBezierPath()
+        shape.move(to: p(r, r))
+        shape.addArc(withCenter: p(0, r), radius: r, startAngle: 0, endAngle: .pi, clockwise: false)
+        Self.smooth(shape, through: [p(-19.5, 50), p(-21, 78), p(-26, 108), p(-31, 140), p(-36, 182)])
+        shape.addLine(to: p(100, 182))
+        Self.smooth(shape, through: [p(92, 118), p(54, 96), p(25, 82), p(20.5, 52), p(r, r)])
+        shape.close()
+
+        let finger = CAShapeLayer()
+        finger.path = shape.cgPath
+        finger.fillColor = UIColor.white.cgColor
+        finger.strokeColor = Palette.uiInk.withAlphaComponent(0.6).cgColor
+        finger.lineWidth = 1.8
+        finger.lineJoin = .round
+        finger.shadowColor = UIColor.black.cgColor
+        finger.shadowOpacity = 0.2
+        finger.shadowRadius = 4
+        finger.shadowOffset = CGSize(width: 0, height: 2)
+
+        // 指甲：指尖上一个宽椭圆
+        let nail = CAShapeLayer()
+        nail.path = UIBezierPath(ovalIn: CGRect(x: o.x - 12.5, y: o.y + 5, width: 25, height: 24)).cgPath
+        nail.fillColor = UIColor(white: 0.96, alpha: 1).cgColor
+        nail.strokeColor = Palette.uiInk.withAlphaComponent(0.4).cgColor
+        nail.lineWidth = 1.3
+
+        // 关节：一道微弯的褶
+        let creasePath = UIBezierPath()
+        creasePath.move(to: p(-13, 56))
+        creasePath.addQuadCurve(to: p(12, 53), controlPoint: p(0, 50))
+        let crease = CAShapeLayer()
+        crease.path = creasePath.cgPath
+        crease.fillColor = nil
+        crease.strokeColor = Palette.uiInk.withAlphaComponent(0.45).cgColor
+        crease.lineWidth = 1.5
+        crease.lineCap = .round
+
+        content.bounds = bounds
+        content.anchorPoint = layer.anchorPoint
+        content.position = Self.tip
+        content.allowsGroupOpacity = true
+        content.opacity = 0.75
+        for l in [finger, nail, crease] { content.addSublayer(l) }
+        layer.addSublayer(content)
+    }
+
+    /// 从当前点开始，平滑地穿过这些点（Catmull-Rom 换成贝塞尔）。
+    static func smooth(_ path: UIBezierPath, through pts: [CGPoint]) {
+        let all = [path.currentPoint] + pts
+        for i in 1..<all.count {
+            let p0 = all[max(i - 2, 0)], p1 = all[i - 1], p2 = all[i], p3 = all[min(i + 1, all.count - 1)]
+            path.addCurve(to: p2,
+                          controlPoint1: CGPoint(x: p1.x + (p2.x - p0.x) / 6, y: p1.y + (p2.y - p0.y) / 6),
+                          controlPoint2: CGPoint(x: p2.x - (p3.x - p1.x) / 6, y: p2.y - (p3.y - p1.y) / 6))
+        }
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
 }

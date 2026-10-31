@@ -1,11 +1,25 @@
 import LearningCore
 import SwiftUI
 
-/// 秘籍页：按秘籍和上下卷分组，每卷一张「声母 × 韵母」的音节表，颜色表示熟练度；没学会的显示成「未解锁的招式」。
-/// 顶部是收集进度（只有这一页出现分母）。点开一格看这个音节对应的常用字和下一步。
+/// 秘籍页：顶上一排选项卡，一本秘籍一个（上下卷在同一页里上下排），每卷一张「声母 × 韵母」的音节表，
+/// 颜色表示熟练度；没学会的显示成「未解锁的招式」。总进度在选项卡上面（只有这一页出现分母）。
+/// 点开一格看这个音节对应的常用字和下一步。
 struct CodexView: View {
     @State var j: JourneyController
     @State private var picked: String?
+    @State private var book: String?
+
+    /// 七本秘籍，按卷的顺序。
+    static let books: [String] = Volumes.all.map(Volumes.book).reduce(into: []) { if !$0.contains($1) { $0.append($1) } }
+
+    func volumes(of b: String) -> [String] { Volumes.all.filter { Volumes.book($0) == b } }
+
+    /// 默认打开：正在挑战的地区那本，否则最近拿到的那本，否则基本功。
+    var defaultBook: String {
+        if let r = j.content.regions.first(where: { j.progress.regions[$0.id]?.phase == .inProgress }) { return Volumes.book(r.volume) }
+        if let v = Volumes.all.last(where: { j.progress.volumes[$0]?.obtained == true }) { return Volumes.book(v) }
+        return Self.books[0]
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -23,15 +37,20 @@ struct CodexView: View {
             .padding(.horizontal, 16).frame(height: 56)
             .background(Palette.mist)
             .overlay(alignment: .bottom) { Rectangle().fill(Palette.ink).frame(height: 3) }
+            VStack(alignment: .leading, spacing: 10) {
+                Text("已学会 \(j.learner.learnedCount) / \(j.content.syllables.count) 个音节，能打出 \(j.typedCommonChars.formatted()) 个常用字")
+                    .font(.system(size: 15, weight: .black))
+                tabs
+            }
+            .padding(.horizontal, 16).padding(.top, 12)
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    Text("已学会 \(j.learner.learnedCount) / \(j.content.syllables.count) 个音节，能打出 \(j.learner.typableCommonChars(j.content).formatted()) 个常用字")
-                        .font(.system(size: 16, weight: .black))
+                VStack(alignment: .leading, spacing: 14) {
                     legend
-                    ForEach(Volumes.all, id: \.self) { v in volumeBlock(v) }
+                    ForEach(volumes(of: book ?? defaultBook), id: \.self) { v in volumeBlock(v) }
                 }
                 .padding(16)
             }
+            .id(book ?? defaultBook)
         }
         .background(Palette.mist)
         .sheet(item: Binding(get: { picked.map(Picked.init) }, set: { picked = $0?.id })) { p in
@@ -40,6 +59,38 @@ struct CodexView: View {
     }
 
     struct Picked: Identifiable { let id: String }
+
+    /// 选项卡：书名，下面一行是重数（有上下卷的取高的那卷）或「还没拿到」。
+    var tabs: some View {
+        let current = book ?? defaultBook
+        return ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(Self.books, id: \.self) { b in
+                        let rank = volumes(of: b).map { j.rank(of: $0) }.max() ?? 0
+                        let on = b == current
+                        Button { book = b } label: {
+                            VStack(spacing: 1) {
+                                Text(b).font(.system(size: 15, weight: .black))
+                                Text(rank == 0 ? "还没拿到" : "第\(["", "一", "二", "三", "四", "五"][rank])重")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(on ? Palette.ink : (rank == 0 ? Palette.slate2 : Palette.red))
+                            }
+                            .foregroundStyle(rank == 0 && !on ? Palette.slate : Palette.ink)
+                            .padding(.horizontal, 12).padding(.vertical, 6)
+                            .background(on ? Palette.gold : Color.white)
+                            .overlay(Rectangle().stroke(Palette.ink, lineWidth: on ? 3 : 1.5))
+                        }
+                        .buttonStyle(.plain)
+                        .id(b)
+                        .accessibilityIdentifier("book-\(b)")
+                    }
+                }
+                .padding(.vertical, 3).padding(.horizontal, 2)
+            }
+            .onAppear { proxy.scrollTo(current, anchor: .center) }
+        }
+    }
 
     var legend: some View {
         HStack(spacing: 12) {

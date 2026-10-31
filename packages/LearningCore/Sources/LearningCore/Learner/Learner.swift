@@ -146,10 +146,6 @@ public struct Learner: Sendable, Equatable {
         return p
     }
 
-    /// 能打出多少个常用字：一个字任一读音的音节碰到过（拆过及以上）就算。
-    public func typableCommonChars(_ content: LearningContent) -> Int {
-        content.commonChars.filter { c in c.spellings.contains { proficiency($0) >= .met } }.count
-    }
 
     /// 学会了多少个音节（拆过及以上）。
     public var learnedCount: Int { records.values.filter { $0.proficiency >= .met }.count }

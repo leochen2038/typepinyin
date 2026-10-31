@@ -12,6 +12,7 @@ struct CardsView: View {
             ForEach(Array(c.cards.enumerated()), id: \.element.id) { i, card in
                 let covered = c.coveredSlots.contains(i)
                 CardView(card: card, big: big)
+                    .modifier(FinisherCardFX(on: card.finisher, arrival: c.finisherArrival))
                     .opacity(covered ? 0 : 1)
                     .scaleEffect(covered ? 0.8 : 1)
                     .animation(.spring(duration: 0.25, bounce: 0.45), value: covered)
@@ -588,5 +589,41 @@ struct StarShape: Shape {
         }
         p.closeSubpath()
         return p
+    }
+}
+
+/// 必杀牌：气条飞来的光点落下时，牌白光一闪、弹一下；之后里面一圈白边一亮一暗，跟气条一起呼吸，直到打出去。
+struct FinisherCardFX: ViewModifier {
+    let on: Bool
+    let arrival: Int
+    @State private var flash = 0.0
+    @State private var pop: CGFloat = 1
+    @State private var breathe = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content
+            .overlay {
+                if on {
+                    Rectangle().strokeBorder(Color.white, lineWidth: 3).padding(4)
+                        .opacity(breathe ? 0.95 : 0.2)
+                        .allowsHitTesting(false)
+                }
+            }
+            .overlay { Rectangle().fill(Color.white).opacity(flash).allowsHitTesting(false) }
+            .scaleEffect(pop)
+            .onChange(of: arrival) { _, _ in
+                guard on else { return }
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(DuelController.qiFlight))
+                    flash = 0.9
+                    pop = reduceMotion ? 1 : 1.12
+                    withAnimation(.easeOut(duration: 0.4)) { flash = 0 }
+                    withAnimation(.spring(duration: 0.35, bounce: 0.55)) { pop = 1 }
+                    guard !reduceMotion else { breathe = true; return }
+                    withAnimation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true)) { breathe = true }
+                }
+            }
+            .onChange(of: on) { _, now in if !now { breathe = false } }
     }
 }

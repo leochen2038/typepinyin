@@ -15,8 +15,10 @@ final class JourneyController {
         case map
         case codex
         case harvest
-        /// 梦醒：一句话，然后走到葫芦集。
+        /// 梦醒：一句话，然后到江湖地图。
         case wake
+        /// 练功房：只出打过的词，一场一场随机（单挑、群战、掌门）。
+        case practice
     }
 
     var screen: Screen = .map
@@ -33,8 +35,10 @@ final class JourneyController {
     var stationIndex = 0
     /// 第一次进这片地区：先演镜头从掌门摇到山脚。
     var introPending = false
-    /// 刚打完一站，回到长卷上要显示的小结卡片。
+    /// 走完这片地区（打赢掌门）或通关后随机一场打完：回到长卷上显示的小结卡片。
     var pendingCard: PendingCard?
+    /// 上一站的结果：走到下一站（输了就是原地）问「挑战还是返回」时，卡片上方带一句。
+    var lastResult: PendingCard?
     /// 接着走：小人从这一站走到下一站。
     var walkFrom: Int?
     /// 刚拿到的秘籍（演出用）。
@@ -65,6 +69,14 @@ final class JourneyController {
     var showRecoveredNotice = false
     /// 调参面板（地图、长卷、秘籍页的标题连点三下）。
     var showPanel = false
+    /// 这一场打完的牌（练功房记打过的词），打完一场一起存。
+    @ObservationIgnored var practicePending: [String: PracticeWord] = [:]
+    // 练功房
+    enum PracticeStage: Equatable { case card, duel }
+    var practiceStage: PracticeStage = .card
+    var practiceStation: Station?
+    /// 这一场练功房的对手来自哪片地区（背景用）。
+    var practiceRegion = "huluji"
 
     let content: LearningContent
     let duel: DuelController
@@ -88,18 +100,32 @@ final class JourneyController {
             DayClock.resetOffset()
         }
         learner.records = progress.records
-        sessionStartChars = learner.typableCommonChars(content)
+        sessionStartChars = typedCommonChars
         screen = startScreen()
         if case .region(let id) = screen { enterRegion(id) }
         if ProcessInfo.processInfo.arguments.contains("-codex") { screen = .codex }   // 开发用：直接打开秘籍页
+        if ProcessInfo.processInfo.arguments.contains("-practice") { enterPractice() }   // 开发用：直接进练功房
         duel.journey = self
     }
 
     /// 一打开去哪：没打完初入江湖就接着打，没拿到《基本功》就去葫芦集，否则回江湖。
     func startScreen() -> Screen {
         if !progress.journey.openingDone { return .opening(battle: progress.journey.openingBattle) }
-        if progress.volumes["base"]?.obtained != true { return .region("huluji") }
+        if progress.volumes["base"]?.obtained != true && !needsMapGuide { return .region("huluji") }
         return .map
+    }
+
+    static let mapGuideKey = "mapGuide"
+    /// 梦醒后第一次到江湖地图：引导点葫芦集（只出现一次，点进去就算看过）。
+    var needsMapGuide: Bool { !progress.journey.tipsSeen.contains(Self.mapGuideKey) }
+
+    func markMapGuideSeen() {
+        guard needsMapGuide else { return }
+        var j = progress.journey
+        j.tipsSeen.insert(Self.mapGuideKey)
+        var ch = ProgressChange()
+        ch.journey = j
+        save(ch)
     }
 
     var today: DayIndex { DayClock.today() }
@@ -113,6 +139,7 @@ final class JourneyController {
         for (k, v) in change.regions { progress.regions[k] = v }
         for r in change.records { progress.records[r.spelling] = r }
         if let s = change.speed { progress.speed = s }
+        for w in change.practice { progress.practice[w.text] = w }
     }
 
     /// 调参「清空进度」：清掉本设备的全部记录，回到第一次打开。
@@ -152,14 +179,21 @@ extension JourneyController {
     /// 排一场比武：出字器、单场设置、对手；打完回调 done（交回小结和学习变化）。
     func planDuel(volume: String?, foe: Fighter, minHP: Int = 0, targetSeconds: Double? = nil, lives: Int? = nil,
                   boss: Bool = false, backdrop: (region: String, station: Int)? = nil, probeLimit: Int = 3,
-                  lengths: [Int: Double] = [2: 1], group: Bool = false, allowed: Set<String>? = nil,
-                  pool: [ContentWord]? = nil, guided: Bool = false, firstWord: ContentWord? = nil,
+                  lengths: [Int: Double] = [2: 1], group: Bool = false, groupTotal: Int? = nil, allowed: Set<String>? = nil,
+                  pool: [ContentWord]? = nil, weights: [String: Double]? = nil, guided: Bool = false, firstWord: ContentWord? = nil,
                   done: @escaping (DuelSummary, LearnerChange) -> Void) {
         let dealer = Dealer(content: content, learner: learner, probe: probeState,
                             context: DealContext(volume: volume, today: today, newToday: newTodaySoFar, probeLimit: probeLimit, lengths: lengths,
-                                                 allowedSyllables: allowed, pool: pool, firstWord: firstWord),
+                                                 allowedSyllables: allowed, pool: pool, firstWord: firstWord, weights: weights),
                             seed: UInt64(Date().timeIntervalSince1970 * 1000) & 0xFFFF_FFFF)
-        let source = JourneyCardSource(dealer: dealer) { [weak self] v in self?.rank(of: v) ?? 0 }
+        practicePending = [:]
+        let source = JourneyCardSource(dealer: dealer, rankOf: { [weak self] v in self?.rank(of: v) ?? 0 }) { [weak self] word, clean, spl in
+            guard let self, !word.syllables.isEmpty else { return }
+            var w = self.practicePending[word.text] ?? self.progress.practice[word.text]
+                ?? PracticeWord(text: word.text, syllables: word.syllables, volume: word.volume)
+            w.note(clean: clean, secondsPerLetter: spl, at: Date().timeIntervalSinceReferenceDate)
+            self.practicePending[word.text] = w
+        }
         var setup = DuelSetup()
         setup.learned = learnedSet
         setup.secondsPerLetter = progress.speed?.secondsPerLetter
@@ -168,6 +202,7 @@ extension JourneyController {
         setup.lives = lives ?? 1
         setup.bossPressure = boss
         setup.groupFight = group
+        setup.groupTotal = groupTotal
         setup.firstCardFree = guided
         setup.day = today
         duel.plan = DuelController.DuelPlan(
@@ -183,9 +218,12 @@ extension JourneyController {
                 if let data = try? JSONEncoder().encode(dealer.probe) { j.probe = data }
                 j.newToday = dealer.context.newToday
                 j.newTodayDay = self.today
+                for w in self.practicePending.values { j.typedChars.formUnion(w.text.map(String.init)) }   // 打出过的字
                 var ch = ProgressChange()
                 ch.journey = j
                 ch.records = Set(attempts.map(\.spelling)).compactMap { self.learner.records[$0] }
+                ch.practice = Array(self.practicePending.values)            // 打过的词进练功房
+                self.practicePending = [:]
                 // 手速跨场记住（按设备）：每场结束按权重滑动一次
                 if !attempts.isEmpty, !JourneyFlags.fast {
                     let start = attempts.map(\.startSeconds).reduce(0, +) / Double(attempts.count)
@@ -198,10 +236,18 @@ extension JourneyController {
             })
     }
 
+    /// 打出过的常用字有几个：按真打出过的字数（打完的牌、奇遇的句子），不按音节推算。
+    /// 练功房的词也并进来，这样记「打过的字」之前的旧进度也算得上。
+    var typedCommonChars: Int {
+        var typed = Set(progress.journey.typedChars.compactMap(\.first))
+        for w in progress.practice.keys { typed.formUnion(w) }
+        return content.commonCharCount(in: typed)
+    }
+
     /// 小结卡片多出来的收获：能打出多少个常用字、这一场学会了几招。
     func gains(_ change: LearnerChange) -> [String] {
         var g: [String] = []
-        let n = learner.typableCommonChars(content)
+        let n = typedCommonChars
         if n > 0 { g.append("你已经能打出 \(n.formatted()) 个常用字") }
         // 学会的招：基本功大多数人本来就会，不算进来
         let learned = change.newlyMet.filter { content.volume(of: $0) != "base" }
@@ -314,10 +360,12 @@ extension JourneyController {
             saveRegion(id, phase: .inProgress)
         }
         pendingCard = nil
+        lastResult = nil
         walkFrom = nil
         obtained = nil
         regionStage = .scroll
         screen = .region(id)
+        markMapGuideSeen()
     }
 
     func saveRegion(_ id: String, phase: RegionPhase) {
@@ -350,7 +398,7 @@ extension JourneyController {
         // 第一关的牌只许用第一卷的 30 个音节（不管奇遇里碰到过什么）
         let allowed: Set<String>? = region.volume == "base" ? Volumes.baseCore : nil
         planDuel(volume: region.volume, foe: foe, lives: boss ? 3 : 1, boss: boss,
-                 backdrop: (region.id, stationIndex), lengths: lengths, group: st.kind == .group, allowed: allowed) { [weak self] summary, change in
+                 backdrop: (region.id, stationIndex), lengths: lengths, group: st.kind == .group, groupTotal: st.groupSize, allowed: allowed) { [weak self] summary, change in
             self?.stationDone(won: summary.won, summary: summary, change: change)
         }
     }
@@ -369,6 +417,9 @@ extension JourneyController {
         sessionLearned.formUnion(change.newlyMet.filter { content.volume(of: $0) != "base" })
         var ch = ProgressChange()
         ch.records = Set(attempts.map(\.spelling)).compactMap { learner.records[$0] }
+        var jj = progress.journey
+        for s in t.sentences { jj.typedChars.formUnion(s.chars.map(String.init)) }     // 奇遇里打出的字也算
+        ch.journey = jj
         save(ch)
         autoAdvance { j in j.leaveEncounter() }
     }
@@ -383,6 +434,7 @@ extension JourneyController {
         }
         stationIndex += 1
         saveRegion(region.id, phase: progress.regions[region.id]?.phase == .cleared ? .cleared : .inProgress)
+        lastResult = PendingCard(summary: nil, title: "奇遇打完了", gains: [], won: true, finished: false)
         walkFrom = stationIndex - 1
         regionStage = .scroll
     }
@@ -412,14 +464,33 @@ extension JourneyController {
             }
         }
         checkRankUps()
-        pendingCard = PendingCard(summary: summary, title: won ? "打赢了\(st.foe?.name ?? "")" : "再来一次",
-                                  gains: gains(change), won: won, finished: finished)
+        let card = PendingCard(summary: summary, title: won ? "打赢了\(st.foe?.name ?? "")" : "差一点",
+                               gains: gains(change), won: won, finished: finished)
         regionStage = .scroll
-        autoAdvance(after: obtained != nil || rankUp != nil ? 5 : 3) { j in
-            j.obtained = nil
-            j.rankUp = nil
-            j.continueRoute()
+        if finished {                                          // 走完了：小结卡片，回江湖
+            pendingCard = card
+            autoAdvance(after: 5) { j in
+                j.obtained = nil
+                j.rankUp = nil
+                j.continueRoute()
+            }
+        } else {                                               // 赢了自动走到下一站，输了留在原地；到了再问挑战还是返回
+            lastResult = card
+            if won { walkFrom = stationIndex - 1 }
         }
+    }
+
+    /// 站前的「挑战」。
+    func challenge() {
+        lastResult = nil
+        enterStation()
+    }
+
+    /// 站前的「返回」：回江湖，进度留着，下次从这一站接着来。
+    func leaveRegion() {
+        lastResult = nil
+        pendingCard = nil
+        screen = .map
     }
 
     /// 拿到一卷：存下来，按熟练度直接升到对应的重数。
@@ -463,7 +534,7 @@ extension JourneyController {
 
     var harvestLines: [String] {
         var out: [String] = []
-        let d = learner.typableCommonChars(content) - sessionStartChars
+        let d = typedCommonChars - sessionStartChars
         if d > 0 { out.append("今天多打出了 \(d) 个常用字") }
         out += sessionRankUps
         if !sessionLearned.isEmpty {

@@ -56,9 +56,28 @@ import SwiftData
     var probeData: Data?
     var newToday: Int = 0
     var newTodayDay: Int = 0
+    var typedCharsData: Data?
     var updatedAt: Date = Date.distantPast
 
     init(deviceId: String) { self.deviceId = deviceId }
+}
+
+/// 练功房：这台设备上打过的一个词。
+@Model final class DevicePracticeWord {
+    var deviceId: String = ""
+    var text: String = ""
+    var syllablesData: Data?
+    var volume: String = ""
+    var seen: Int = 0
+    var clean: Int = 0
+    var recentData: Data?
+    var secondsPerLetter: Double = 0
+    var lastSeen: Double = 0
+
+    init(deviceId: String, text: String) {
+        self.deviceId = deviceId
+        self.text = text
+    }
 }
 
 @Model final class DeviceSpeed {

@@ -60,6 +60,18 @@ import Testing
         #expect(p.speed?.secondsPerLetter == 0.4)          // 速度按设备分开
     }
 
+    /// 打出过的字：两台设备取并集。
+    @Test func typedCharsUnion() throws {
+        let store = try ProgressStore(inMemory: true, deviceId: "A")
+        var a = ProgressChange()
+        a.journey = JourneyState(typedChars: ["江", "湖"])
+        try store.save(a)
+        var b = ProgressChange()
+        b.journey = JourneyState(typedChars: ["湖", "大"])
+        try store.save(b, asDevice: "B")
+        #expect(store.load().journey.typedChars == ["江", "湖", "大"])
+    }
+
     @Test func resetClearsThisDevice() throws {
         let store = try ProgressStore(inMemory: true, deviceId: "A")
         var ch = ProgressChange()
@@ -70,6 +82,26 @@ import Testing
         let p = store.load()
         #expect(!p.journey.openingDone)
         #expect(p.records.isEmpty)
+    }
+
+    /// 练功房的词：存下来读得回；两台设备取打得多的那份；清空时一起清掉。
+    @Test func practiceWords() throws {
+        let store = try ProgressStore(inMemory: true, deviceId: "A")
+        var w = PracticeWord(text: "江湖", syllables: ["jiang", "hu"], volume: "sanpin-shang")
+        w.note(clean: false, secondsPerLetter: 0.8, at: 10)
+        var a = ProgressChange()
+        a.practice = [w]
+        try store.save(a)
+        w.note(clean: true, secondsPerLetter: 0.4, at: 20)
+        var b = ProgressChange()
+        b.practice = [w]
+        try store.save(b, asDevice: "B")
+        let got = try #require(store.load().practice["江湖"])
+        #expect(got.seen == 2)
+        #expect(got.recent == [false, true])
+        #expect(got.syllables == ["jiang", "hu"])
+        try store.resetAll()
+        #expect(store.load().practice["江湖"]?.seen == 2)  // 只清本设备：B 的还在
     }
 
     @Test func unreadableFileIsKeptAndReplaced() throws {

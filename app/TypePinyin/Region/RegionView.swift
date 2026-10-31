@@ -1,13 +1,13 @@
 import LearningCore
 import SwiftUI
 
-/// 地区画面：长卷 + 顶栏。镜头跟着小人走；过场一句后直接开打（不在这里停下来点按钮）。
-/// 打完一站，小结卡片只盖住画的下半部分，上面看得到走过的路和终点的掌门。
+/// 地区画面：长卷 + 顶栏。镜头跟着小人走；每到一站先问「挑战」还是「返回」（卡片上是这一站的对手和过场）。
+/// 打赢一站小人自动走到下一站再问，输了留在原地问；走完这片地区才有小结卡片。卡片只盖住画的下半部分。
 struct RegionView: View {
     @State var j: JourneyController
     @State private var cameraY: CGFloat = 0
     @State private var hero: Double = 0
-    @State private var line: String?
+    @State private var asking = false
     @State private var banner = false
     @State private var busy = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -32,16 +32,13 @@ struct RegionView: View {
                             .padding(.top, g.size.height * 0.32)
                             .transition(.opacity.combined(with: .scale(scale: 0.9)))
                     }
-                    if let line {
-                        Text(line).font(.system(size: 18, weight: .bold)).foregroundStyle(Palette.ink)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 18).padding(.vertical, 12)
-                            .background(Color.white).overlay(Rectangle().stroke(Palette.ink, lineWidth: 3))
-                            .compositingGroup().shadow(color: Palette.ink, radius: 0, x: 3, y: 3)
-                            .padding(.horizontal, 20)
-                            .frame(maxHeight: .infinity, alignment: .bottom).padding(.bottom, 40)
-                            .transition(.opacity)
-                            .accessibilityIdentifier("stationLine")
+                    if asking, j.pendingCard == nil, j.obtained == nil, j.rankUp == nil, let st = j.currentStation {
+                        VStack {
+                            Spacer()
+                            StationCard(station: st, index: j.stationIndex, count: route.stations.count, last: j.lastResult,
+                                        onGo: { asking = false; j.challenge() }, onBack: { asking = false; j.leaveRegion() })
+                        }
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
                     if let card = j.pendingCard, j.obtained == nil, j.rankUp == nil {
                         VStack {
@@ -66,6 +63,7 @@ struct RegionView: View {
             .background(Palette.mist)
             .animation(.easeOut(duration: 0.3), value: j.pendingCard?.title)
             .animation(.easeOut(duration: 0.3), value: j.obtained)
+            .animation(.easeOut(duration: 0.3), value: asking)
         }
     }
 
@@ -94,12 +92,12 @@ struct RegionView: View {
                 withAnimation(.easeInOut(duration: 2.2)) { cameraY = target }
                 try? await Task.sleep(for: .seconds(2.3))
                 withAnimation(.easeOut(duration: 0.3)) { banner = false }
-                sayLineThenFight()
+                askChallenge()
             }
         } else {
             j.introPending = false
             cameraY = target
-            sayLineThenFight()
+            askChallenge()
         }
     }
 
@@ -120,7 +118,7 @@ struct RegionView: View {
             guard busy else { return }
             busy = false
             j.walkFrom = nil
-            sayLineThenFight()
+            askChallenge()
         }
     }
 
@@ -129,21 +127,77 @@ struct RegionView: View {
         busy = false
         withAnimation(.easeOut(duration: 0.15)) { hero = Double(j.stationIndex) }
         j.walkFrom = nil
-        sayLineThenFight()
+        askChallenge()
     }
 
-    func sayLineThenFight() {
-        guard j.pendingCard == nil, let st = j.currentStation else { return }
-        withAnimation { line = st.line }
-        Task { @MainActor in
-            try? await Task.sleep(for: .seconds(fast ? 0.2 : 1.8))
-            withAnimation { line = nil }
-            j.enterStation()
+    /// 到了一站：问挑战还是返回。
+    func askChallenge() {
+        guard j.pendingCard == nil, j.currentStation != nil else { return }
+        asking = true
+        j.autoAdvance(after: 2) { jj in
+            guard asking else { return }
+            asking = false
+            jj.challenge()
         }
     }
 }
 
-/// 打完一站的小结卡片（只盖住下半部分）。
+/// 站前的卡片：上一站的结果（有的话）、这一站是谁、过场一句，「挑战」或「返回」。
+struct StationCard: View {
+    let station: Station
+    /// 第几站 / 共几站；练功房没有站数，传 nil。
+    let index: Int?
+    let count: Int
+    let last: JourneyController.PendingCard?
+    let onGo: () -> Void
+    let onBack: () -> Void
+
+    var heading: String {
+        let name = station.foe?.name ?? ""
+        switch station.kind {
+        case .duel: return name
+        case .group: return station.groupSize.map { "\($0) 人群战 · \(name)领头" } ?? "群战 · \(name)一伙"
+        case .boss: return "掌门 · \(name)"
+        case .encounter: return "奇遇"
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let last {
+                HStack(spacing: 8) {
+                    Text(last.title).font(.system(size: 15, weight: .black))
+                    if let g = last.gains.first { Text(g).font(.system(size: 13, weight: .bold)).foregroundStyle(Palette.slate) }
+                }
+                .lineLimit(1).minimumScaleFactor(0.8)
+                Rectangle().fill(Palette.ink.opacity(0.15)).frame(height: 1)
+            }
+            HStack(alignment: .firstTextBaseline) {
+                Text(heading).font(Fonts.display(26))
+                Spacer()
+                if let index {
+                    Text("第 \(index + 1) / \(count) 站").font(.system(size: 13, weight: .bold)).foregroundStyle(Palette.slate)
+                }
+            }
+            Text(station.line).font(.system(size: 16, weight: .bold)).foregroundStyle(Palette.ink)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("stationLine")
+            HStack(spacing: 12) {
+                RegionCard.button(station.kind == .encounter ? "去看看" : "挑战", primary: true, action: onGo)
+                RegionCard.button("返回", primary: false, action: onBack)
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.white)
+        .overlay(Rectangle().stroke(Palette.ink, lineWidth: 3))
+        .compositingGroup()
+        .shadow(color: Palette.ink, radius: 0, x: 6, y: 6)
+        .padding(.horizontal, 16).padding(.bottom, 24)
+    }
+}
+
+/// 走完一片地区（或通关后随机一场）的小结卡片（只盖住下半部分）。
 struct RegionCard: View {
     let card: JourneyController.PendingCard
     let onGo: () -> Void
@@ -190,6 +244,10 @@ struct RegionCard: View {
     }
 
     func button(_ label: String, primary: Bool, action: @escaping () -> Void) -> some View {
+        Self.button(label, primary: primary, action: action)
+    }
+
+    static func button(_ label: String, primary: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(label).font(Fonts.display(22)).frame(maxWidth: .infinity).frame(height: 50)
                 .background(primary ? Palette.gold : Color.white).foregroundStyle(Palette.ink)

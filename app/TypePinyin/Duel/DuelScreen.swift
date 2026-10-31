@@ -10,6 +10,7 @@ struct DuelScreen: View {
     @State private var cardFrames: [Int: CGRect] = [:]
     @State private var battleFrame: CGRect = .zero
     @State private var keyboardFrame: CGRect = .zero
+    @State private var qiFrame: CGRect = .zero
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -68,8 +69,9 @@ struct DuelScreen: View {
         .onPreferenceChange(CardFrameKey.self) { cardFrames = $0 }
         .onPreferenceChange(BattleFrameKey.self) { battleFrame = $0 }
         .onPreferenceChange(KeyboardFrameKey.self) { keyboardFrame = $0 }
+        .onPreferenceChange(QiBarFrameKey.self) { qiFrame = $0 }
         .overlay {
-            FXOverlay(c: c, cardFrames: cardFrames, battleFrame: battleFrame, keyboardFrame: keyboardFrame)
+            FXOverlay(c: c, cardFrames: cardFrames, battleFrame: battleFrame, keyboardFrame: keyboardFrame, qiFrame: qiFrame)
         }
 
         .overlay {
@@ -118,10 +120,15 @@ struct FXOverlay: View {
     let cardFrames: [Int: CGRect]
     let battleFrame: CGRect
     let keyboardFrame: CGRect
+    var qiFrame: CGRect = .zero
 
     var body: some View {
         ZStack {
             ReviewHost(c: c, cardFrames: cardFrames)
+            if c.finisherArrival > 0, qiFrame != .zero, let card = cardFrames[0] {
+                QiSparks(from: CGPoint(x: qiFrame.maxX - 6, y: qiFrame.midY), to: CGPoint(x: card.midX, y: card.midY))
+                    .id(c.finisherArrival)                         // 每张必杀牌飞一次
+            }
             if battleFrame != .zero && keyboardFrame != .zero {
                 GrabHost(c: c, hand: { toScreen(c.scene.playerHand) }, chest: { toScreen(c.scene.playerChest) }, key: { ch in
                     c.keyCenter(ch).map { CGPoint(x: keyboardFrame.minX + $0.x, y: keyboardFrame.minY + $0.y) }
@@ -215,5 +222,60 @@ struct NearMissLayer: View {
             }
         }
         .allowsHitTesting(false)
+    }
+}
+
+/// 必杀牌露出来时：一串朱红和白的光点从气条飞到牌上（弧线、一个跟一个，墨线描边），落下就散。
+struct QiSparks: View {
+    let from: CGPoint
+    let to: CGPoint
+    @State private var t: CGFloat = 0
+    @State private var gone = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        SparkField(from: from, to: to, t: t)
+            .opacity(gone ? 0 : 1)
+            .allowsHitTesting(false)
+            .onAppear {
+                guard !reduceMotion else { gone = true; return }
+                withAnimation(.easeIn(duration: DuelController.qiFlight)) { t = 1 }
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(DuelController.qiFlight + 0.05))
+                    withAnimation(.easeOut(duration: 0.15)) { gone = true }
+                }
+            }
+    }
+}
+
+/// 光点的位置是进度 t 的函数：做成 Animatable，t 动画时每帧按弧线重算。
+private struct SparkField: View, @preconcurrency Animatable {
+    let from: CGPoint
+    let to: CGPoint
+    var t: CGFloat
+    var animatableData: CGFloat { get { t } set { t = newValue } }
+    static let count = 9
+    static let lag: CGFloat = 0.06
+
+    var body: some View {
+        ZStack {
+            ForEach(0..<Self.count, id: \.self) { k in
+                let p = max(0, min(1, (t - CGFloat(k) * Self.lag) / (1 - Self.lag * CGFloat(Self.count - 1))))
+                let d = 10 - CGFloat(k) * 0.6
+                Circle().fill(k % 3 == 0 ? Color.white : Palette.red)
+                    .overlay(Circle().stroke(Palette.ink, lineWidth: 1.2))
+                    .frame(width: d, height: d)
+                    .position(point(p, bend: CGFloat(k % 3 - 1) * 18))
+                    .opacity(p <= 0 || p >= 1 ? 0 : 1)
+            }
+        }
+    }
+
+    /// 二次贝塞尔：从气条往右甩出去，再落到牌中间；bend 让几颗光点走的弧线错开。
+    func point(_ p: CGFloat, bend: CGFloat) -> CGPoint {
+        let ctrl = CGPoint(x: max(from.x, to.x) + 70 + bend, y: from.y + (to.y - from.y) * 0.25 + bend)
+        let u = 1 - p
+        return CGPoint(x: u * u * from.x + 2 * u * p * ctrl.x + p * p * to.x,
+                       y: u * u * from.y + 2 * u * p * ctrl.y + p * p * to.y)
     }
 }

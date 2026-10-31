@@ -11,6 +11,8 @@ struct WorldMapView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     static let canvasHeight: CGFloat = 760
+    /// 最下面那个点：原来的初入江湖，梦打完以后是练功房。
+    static let practiceId = "chuRuJiangHu"
 
     var baseObtained: Bool { j.progress.volumes["base"]?.obtained == true }
 
@@ -26,7 +28,7 @@ struct WorldMapView: View {
     func spot(_ id: String) -> MapSpot? { j.content.region(id)?.map ?? j.content.place(id)?.map }
 
     func state(_ id: String) -> PlaceState {
-        if id == "chuRuJiangHu" { return j.progress.journey.openingDone ? .passed : .inProgress }
+        if id == Self.practiceId { return .untouched }
         if id == "wuLinDaHui" { return .locked("集齐十卷开放") }
         switch j.progress.regions[id]?.phase ?? .untouched {
         case .untouched: return .untouched
@@ -58,10 +60,16 @@ struct WorldMapView: View {
                                 }
                             }
                             ForEach(j.content.places) { p in
-                                if p.id == "chuRuJiangHu" || baseObtained {
-                                    sign(id: p.id, name: p.name, hint: nil, icon: p.id == "wuLinDaHui" ? "crown" : "figure.walk")
+                                if p.id == Self.practiceId || baseObtained {
+                                    sign(id: p.id, name: p.name, hint: p.id == Self.practiceId ? "打过的词" : nil,
+                                         icon: p.id == "wuLinDaHui" ? "crown" : "figure.martial.arts")
                                         .position(point(p.map, width: w, height: h))
                                 }
+                            }
+                            if j.needsMapGuide, selected == nil, let r = j.content.region("huluji") {
+                                MapGuide(name: r.name)
+                                    .position(point(r.map, width: w, height: h))
+                                    .allowsHitTesting(false)
                             }
                             if baseObtained && j.progress.journey.fogCleared {
                                 Text("九处随你挑，点地名就能去").font(.system(size: 14, weight: .bold)).foregroundStyle(Palette.slate)
@@ -117,9 +125,10 @@ struct WorldMapView: View {
     }
 
     func sign(id: String, name: String, hint: String?, icon: String?) -> some View {
-        PlaceSign(name: name, hint: hint, icon: icon == "crown" || icon == "figure.walk" ? icon! : PlaceSign.symbol(icon),
+        PlaceSign(name: name, hint: hint, icon: icon == "crown" || icon == "figure.martial.arts" ? icon! : PlaceSign.symbol(icon),
                   state: state(id), selected: selected == id)
             .onTapGesture {
+                if id == Self.practiceId { j.enterPractice(); return }
                 guard j.content.region(id) != nil else { return }
                 selected = id
             }
@@ -170,5 +179,40 @@ struct WorldMapView: View {
             j.save(ch)
             fogClearing = false
         }
+    }
+}
+
+/// 梦醒后第一次到地图：葫芦集外面一圈慢慢扩散的金色光圈，上面一句「点这里」（只出现一次）。
+struct MapGuide: View {
+    let name: String
+    @State private var pulse = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        ZStack {
+            Circle().stroke(Palette.gold, lineWidth: 4)
+                .frame(width: 96, height: 96)
+                .scaleEffect(pulse ? 1.25 : 0.9)
+                .opacity(pulse ? 0 : 0.9)
+            Circle().stroke(Palette.gold, lineWidth: 3)
+                .frame(width: 96, height: 96)
+            VStack(spacing: 0) {
+                Text("点「\(name)」，开始第一关")
+                    .font(.system(size: 16, weight: .black)).foregroundStyle(Palette.ink)
+                    .padding(.horizontal, 14).padding(.vertical, 9)
+                    .background(Palette.gold)
+                    .overlay(Rectangle().stroke(Palette.ink, lineWidth: 3))
+                    .compositingGroup().shadow(color: Palette.ink, radius: 0, x: 3, y: 3)
+                Image(systemName: "arrowtriangle.down.fill").font(.system(size: 16)).foregroundStyle(Palette.ink)
+                    .offset(y: -2)
+            }
+            .fixedSize()
+            .offset(y: -84)
+        }
+        .onAppear {
+            withAnimation(.easeOut(duration: 1.4).repeatForever(autoreverses: false)) { pulse = true }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("mapGuide")
     }
 }

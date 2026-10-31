@@ -16,7 +16,7 @@ extension DuelEngine {
 
     func startGroup() {
         unitHP = opponent.maxHP
-        foeQueue = Self.groupLineup(total: tuning.groupTotal)
+        foeQueue = Self.groupLineup(total: setup.groupTotal ?? tuning.groupTotal)
         foes = []
         let n = min(max(1, tuning.groupSize), foeQueue.count)
         for slot in 0..<n { joinFoe(slot: slot, stagger: Double(slot) / Double(n)) }

@@ -16,6 +16,8 @@ public struct DuelSetup: Sendable {
     public var bossPressure: Bool?
     /// 这一场是群战；nil = 调参里的。
     public var groupFight: Bool?
+    /// 群战一共几个人；nil = 调参里的。
+    public var groupTotal: Int?
     /// 第一张牌不蓄力（教学：跟着亮起来的键慢慢按）。
     public var firstCardFree = false
     /// 今天是哪一天（交回的打字结果带上）。
@@ -32,8 +34,14 @@ public protocol CardSource: AnyObject {
     func nextIdiom() -> (word: Word, rank: Int)?
     /// 一张牌打完：有没有打错或看提示。
     func cardDone(_ word: Word, clean: Bool)
+    /// 同上，带上这张牌每个字母的用时（练功房按它判断顺不顺）。
+    func cardDone(_ word: Word, clean: Bool, secondsPerLetter: Double)
     /// 一个音节成了新招（由出牌来源安排复现）。
     func newMove(_ spelling: String)
+}
+
+public extension CardSource {
+    func cardDone(_ word: Word, clean: Bool, secondsPerLetter: Double) { cardDone(word, clean: clean) }
 }
 
 /// 正在打的这张牌，每个音节的记录（用来交回打字结果）。

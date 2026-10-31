@@ -37,7 +37,15 @@ struct JourneyRoot: View {
             case .harvest:
                 HarvestView(j: j)
             case .wake:
-                OpeningView(line: j.content.dream?.outro ?? "江湖路远，从这里出发。", button: "出发") { j.enterRegion("huluji") }
+                OpeningView(line: j.content.dream?.outro ?? "江湖路远，从这里出发。", button: "出发") { j.screen = .map }
+            case .practice:
+                switch j.practiceStage {
+                case .card:
+                    PracticeView(j: j)
+                case .duel:
+                    DuelScreen(c: j.duel, prepare: { j.startPracticeDuel() })
+                        .id("practice-\(j.duelToken)")
+                }
             case .map:
                 WorldMapView(j: j)
             case .codex:

@@ -111,11 +111,15 @@ extension DuelEngine {
         }
     }
 
-    /// 打错一个字母：没学过的音节第一次错是「新招」，不罚；已学会的才罚。
+    /// 打错一个字母：一律扣血（教学牌除外）；没学过的音节第一次错还记为「新招」。
     func wrongLetter(word: Word, typed: Int, onIncoming: Bool) {
         let idx = word.syllableIndex(atLetter: typed)
         let s = word.syllables[idx]
         wordClean = false
+        if setup.firstCardFree && moveMarks.isEmpty {         // 教学牌：按错不扣血、不断连招、不算新招，键照样亮着
+            emit(.letterRejected(Array(word.letters)[typed]))
+            return
+        }
         if features.contains(.teaching), learner.isNew(s) {
             let n = (learner.missCount[s] ?? 0) + 1
             learner.missCount[s] = n
@@ -130,9 +134,8 @@ extension DuelEngine {
                     for k in tuning.replayOffsets { learner.replayQueue.append((deal: dealCount + k - 1, syllable: s)) }
                 }
             }
-            hintNow(word: word, typed: typed)
-            return
         }
+        // 拼错一律扣血，见没见过都一样（新招照样记、照样复现）
         if onIncoming {                                       // 打来招时按错不额外掉血
             emit(.mistake(s, damage: 0))
             hintNow(word: word, typed: typed)
@@ -163,7 +166,7 @@ extension DuelEngine {
         let perLetter = firstLetterAt.map { (clock - $0 + max(0, $0 - readyAt) * 0.5) / Double(max(1, card.word.letterCount)) } ?? 9
         let gold = wordClean && perLetter <= tuning.goldSecondsPerLetter
         recordSpeed(word: card.word)
-        source?.cardDone(card.word, clean: wordClean)
+        source?.cardDone(card.word, clean: wordClean, secondsPerLetter: perLetter)
         if heavy, opponent.incoming != nil {                  // 重招打断蓄力
             opponent.incoming = nil
             emit(.chargeInterrupted)

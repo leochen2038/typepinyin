@@ -8,7 +8,7 @@ public final class DuelEngine {
     public struct Features: OptionSet, Sendable {
         public let rawValue: Int
         public init(rawValue: Int) { self.rawValue = rawValue }
-        /// 新招：没学过的音节打错不罚，并排进复习（第 2、5 张牌再出现）。
+        /// 新招：没学过的音节第一次打错记为新招，排进复习（第 2、5 张牌再出现）；扣血照常。
         public static let teaching = Features(rawValue: 1 << 0)
         public static let store = Features(rawValue: 1 << 1)
         public static let flaw = Features(rawValue: 1 << 2)

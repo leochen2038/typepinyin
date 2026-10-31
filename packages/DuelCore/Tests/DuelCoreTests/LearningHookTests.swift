@@ -99,4 +99,20 @@ import LearningCore
         clock.type(e, "pengyou")
         #expect(e.opponent.pressureStart != nil)
     }
+
+    /// 教学牌：按错不扣血、不断连招、不算新招；打完以后按错照常。
+    @Test func tutorialCardMistakesAreFree() {
+        var s = DuelSetup()
+        s.firstCardFree = true
+        s.learned = ["peng", "you", "guang", "ming"]
+        let e = engine(FixedSource([Fixture.word("朋友"), Fixture.word("光明")]), setup: s)
+        let clock = FakeClock()
+        let ev = clock.type(e, "px")
+        #expect(e.player.hp == 100)
+        #expect(!ev.contains { if case .mistake = $0 { return true } else { return false } })
+        #expect(!ev.contains { if case .newMove = $0 { return true } else { return false } })
+        clock.type(e, "engyou")
+        clock.type(e, "gx")
+        #expect(e.player.hp < 100)                            // 第二张牌按错照常扣
+    }
 }

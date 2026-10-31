@@ -9,10 +9,13 @@ final class JourneyCardSource: CardSource {
     let rankOf: (String) -> Int
     /// 这一场新招的音节（交给出字器排复现）。
     private(set) var newMoves: [String] = []
+    /// 每打完一张牌（练功房记打过的词）。
+    let onCard: (Word, Bool, Double) -> Void
 
-    init(dealer: Dealer, rankOf: @escaping (String) -> Int) {
+    init(dealer: Dealer, rankOf: @escaping (String) -> Int, onCard: @escaping (Word, Bool, Double) -> Void = { _, _, _ in }) {
         self.dealer = dealer
         self.rankOf = rankOf
+        self.onCard = onCard
     }
 
     static func word(_ w: ContentWord) -> Word {
@@ -31,6 +34,11 @@ final class JourneyCardSource: CardSource {
 
     func cardDone(_ word: Word, clean: Bool) {
         dealer.note(ContentWord(text: word.text, syllables: word.syllables, volume: word.volume, isIdiom: word.isIdiom, freq: 0), clean: clean)
+    }
+
+    func cardDone(_ word: Word, clean: Bool, secondsPerLetter: Double) {
+        cardDone(word, clean: clean)
+        onCard(word, clean, secondsPerLetter)
     }
 
     func newMove(_ spelling: String) {

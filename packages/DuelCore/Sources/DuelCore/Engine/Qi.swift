@@ -24,6 +24,6 @@ extension DuelEngine {
         }
         let n = min(tuning.qiPerStrikeMax, tuning.qiPerStrikeBase + player.combo) + (flaw ? tuning.flawQiBonus : 0)
             + (perfect ? tuning.perfectQi : 0)
-        gainQi(n)
+        gainQi(Int((Double(n) * max(1, tuning.qiMultiplier)).rounded()))     // 测试用的攒气倍数
     }
 }

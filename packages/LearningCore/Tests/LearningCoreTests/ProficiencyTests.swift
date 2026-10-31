@@ -66,11 +66,11 @@ import Testing
         #expect(l.proficiency("shan") == .fluent)
     }
 
-    @Test func typableCountsCharsWithAnyMetReading() {
-        var l = Learner()
+    /// 能打出多少个常用字：只数真打出过的字，不按音节推算；不是常用字的不算。
+    @Test func typableCountsOnlyCharsTyped() {
         let c = TestContent.shared
-        #expect(l.typableCommonChars(c) == 0)
-        l.record([hit("shi", day: 1, ok: false)])
-        #expect(l.typableCommonChars(c) == c.commonChars.filter { $0.spellings.contains("shi") }.count)
+        #expect(c.commonCharCount(in: []) == 0)
+        #expect(c.commonCharCount(in: Set("江湖是是")) == 3)
+        #expect(c.commonCharCount(in: Set("江湖𠀀")) == 2)
     }
 }

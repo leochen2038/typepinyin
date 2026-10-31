@@ -16,10 +16,14 @@ public struct DealContext: Codable, Sendable, Equatable {
     public var pool: [ContentWord]?
     /// 第一张牌固定出这个词（教学）。
     public var firstWord: ContentWord?
+    /// 练功房：pool 里每个词的比重（按词的文字）；有它时按比重抽、可以重复穿插，只避开刚出的那张和场上的。
+    public var weights: [String: Double]?
 
     public init(volume: String?, today: DayIndex, newToday: Int = 0, probeLimit: Int = 3, lengths: [Int: Double] = [2: 1],
-                allowedSyllables: Set<String>? = nil, pool: [ContentWord]? = nil, firstWord: ContentWord? = nil) {
+                allowedSyllables: Set<String>? = nil, pool: [ContentWord]? = nil, firstWord: ContentWord? = nil,
+                weights: [String: Double]? = nil) {
         self.pool = pool
+        self.weights = weights
         self.firstWord = firstWord
         self.volume = volume
         self.today = today
@@ -109,6 +113,13 @@ public final class Dealer: @unchecked Sendable {
         defer { dealt += 1 }
         targetLength = rollLength()
         if dealt == 0, let w = context.firstWord { return finish(w, .filler) }   // 教学：第一张牌固定
+        if let pool = context.pool, !pool.isEmpty, let weights = context.weights {   // 练功房：按比重抽
+            let last = recentWords.last
+            var cands = pool.filter { !$0.isIdiom && !avoidingTexts.contains($0.text) && $0.text != last }
+            if cands.isEmpty { cands = pool.filter { !avoidingTexts.contains($0.text) } }
+            if cands.isEmpty { cands = pool }
+            return finish(weightedPick(cands, weights), .review)
+        }
         if let pool = context.pool, !pool.isEmpty {              // 梦里：只从专门挑的词里出，不探、不排复习
             let fresh = pool.filter { !$0.isIdiom && $0.text.count == targetLength && !recentWords.suffix(tuning.recentWords).contains($0.text)
                 && !avoidingTexts.contains($0.text) }
@@ -177,6 +188,16 @@ public final class Dealer: @unchecked Sendable {
         return finish(pickEasy(avoid: avoid, topN: 600), .filler)
     }
 
+    func weightedPick(_ words: [ContentWord], _ weights: [String: Double]) -> ContentWord {
+        let ws = words.map { max(0.01, weights[$0.text] ?? PracticeWeights.floor) }
+        var r = Double(rng.next() % 1_000_000) / 1_000_000 * ws.reduce(0, +)
+        for (w, x) in zip(words, ws) {
+            if r < x { return w }
+            r -= x
+        }
+        return words[words.count - 1]
+    }
+
     func rollLength() -> Int {
         let total = context.lengths.values.reduce(0, +)
         guard total > 0 else { return 2 }
@@ -230,6 +251,10 @@ public final class Dealer: @unchecked Sendable {
     /// 必杀用的成语：优先全由会的音节组成的。
     public func nextIdiom() -> ContentWord {
         if let pool = context.pool, let w = pool.filter(\.isIdiom).randomElement(using: &rng) { return w }
+        if let pool = context.pool, context.weights != nil, !pool.isEmpty {   // 练功房没有成语：用打过的最长的几个词
+            let longest = pool.sorted { $0.text.count > $1.text.count }
+            return Array(longest.prefix(6)).randomElement(using: &rng) ?? pool[0]
+        }
         let idioms = content.idioms
         let easy = idioms.filter(wordIsEasy).prefix(40)
         if !easy.isEmpty { return Array(easy).randomElement(using: &rng)! }

@@ -35,9 +35,13 @@ public struct Tuning: Codable, Sendable, Equatable {
     public var finisherShare: Double = 0.25
     /// 打出一招完美多攒几点气（又快又准，必杀来得更早）。
     public var perfectQi: Int = 5
+    /// 攒气倍数（测试用，1 = 正常）：调大了气攒得快，必杀来得勤，看必杀的演出和群战打全场不用等。
+    public var qiMultiplier: Double = 1
     /// 群战（试玩）：一场好几个敌人，场上最多 groupSize 个，倒下一个补一个，一共 groupTotal 个；
     /// 打完一张牌自动打蓄力最多的那个并打断它的蓄力，必杀打全场。只在一张牌模式下有效。
     public var groupFight: Bool = false
+    /// 群战必杀怎么打全场（只管画面，伤害都一样）：0 = 横扫剑气，1 = 连斩（闪身到每个人面前），2 = 旋身（冲进人群转一圈）。
+    public var groupFinisherStyle: Int = 0
     /// 命数（试玩）：对手有几条血（1 = 一条；掌门 3 条，最终 Boss 5 条）。打空一条跪地再站起来，血条满上。
     public var foeLives: Int = 1
     /// 必杀命中直接扣一条命。
@@ -113,7 +117,7 @@ public struct Tuning: Codable, Sendable, Equatable {
         case qiPerStrikeBase, qiPerStrikeMax, qiParry, qiBlock, finisherBase, finisherComboBonus
         case heavyLetters, mediumLetters, replayOffsets, commitOnRelease
         case expectedKeyGrowPt, nearMissMaxPt, hapticsOnKey, comboGoldAt, comboRedAt, movesPerDuel, goldSecondsPerLetter, hintSeconds
-        case cardsOnTable, pressureFactor, pressureBaseSeconds, pressureMinSeconds, grabStyle, handZones, slashMinGap, grabMode, qiBar, moveDots, rankFx, rankFxTheme, finisherShare, perfectQi, groupFight, groupSize, groupTotal, textMode, textStyle
+        case cardsOnTable, pressureFactor, pressureBaseSeconds, pressureMinSeconds, grabStyle, handZones, slashMinGap, grabMode, qiBar, moveDots, rankFx, rankFxTheme, finisherShare, perfectQi, qiMultiplier, groupFight, groupFinisherStyle, groupSize, groupTotal, textMode, textStyle
         case foeLives, finisherTakesLife, lifeSpeedup, lifeDownSeconds
         case bossPressure, bossPushBack, bossCycleCards, bossHit
         case learning
@@ -174,7 +178,9 @@ public struct Tuning: Codable, Sendable, Equatable {
         rankFxTheme = try v(.rankFxTheme, d.rankFxTheme)
         finisherShare = try v(.finisherShare, d.finisherShare)
         perfectQi = try v(.perfectQi, d.perfectQi)
+        qiMultiplier = try v(.qiMultiplier, d.qiMultiplier)
         groupFight = try v(.groupFight, d.groupFight)
+        groupFinisherStyle = try v(.groupFinisherStyle, d.groupFinisherStyle)
         groupSize = try v(.groupSize, d.groupSize)
         groupTotal = try v(.groupTotal, d.groupTotal)
         foeLives = try v(.foeLives, d.foeLives)

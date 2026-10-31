@@ -264,6 +264,11 @@ public struct LearningContent: Sendable {
     /// 计入重数的音节：这一卷的全部常用音节。
     public func rankSyllables(in volume: String, tuning: LearningTuning) -> [ContentSyllable] { commonSyllables(in: volume) }
 
+    /// 这些字里有几个是常用字（「你已经能打出多少个常用字」：按玩家真打出过的字数，不按音节推算）。
+    public func commonCharCount(in typed: Set<Character>) -> Int {
+        commonChars.filter { $0.char.first.map(typed.contains) ?? false }.count
+    }
+
     public func region(_ id: String) -> Region? { regions.first { $0.id == id } }
     public func place(_ id: String) -> Place? { places.first { $0.id == id } }
     public var idioms: [ContentWord] { words.filter(\.isIdiom) }

@@ -70,7 +70,7 @@ struct PressureBarHost: View {
 
     var body: some View {
         // 一直挂着：回顾时对手停手、条是空的，新牌露出来再涨（以前条为 0 就藏起来，回顾时会一闪一闪）
-        if c.cards.count == 1 && c.summary == nil && !c.tuning.groupFight {      // 群战时每个敌人头上有自己的条
+        if c.cards.count == 1 && c.summary == nil && !c.groupFight {      // 群战时每个敌人头上有自己的条
             PressureBar(name: c.foeName, progress: c.pressure)
         }
     }

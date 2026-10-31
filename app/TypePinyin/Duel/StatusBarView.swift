@@ -13,9 +13,20 @@ struct StatusBarView: View {
                     Text("渐入佳境").font(.system(size: 11, weight: .bold)).foregroundStyle(Palette.slate)
                 }
                 SkewBar(value: Double(c.playerHP) / Double(max(1, c.playerMaxHP)), color: Palette.navy, height: 12, skew: -0.25)
+                    .overlay(alignment: .trailing) { HurtFloat(hurt: c.hurt) }
                 if c.tuning.qiBar {
                     SkewBar(value: Double(c.qi) / 100, color: Palette.gold, height: 7, skew: -0.25, border: 2)
+                        .overlay { if c.qiReady { QiReadyGlow() } }
+                        .background(GeometryReader { g in Color.clear.preference(key: QiBarFrameKey.self, value: g.frame(in: .named("duel"))) })
                         .frame(maxWidth: .infinity, alignment: .leading).scaleEffect(x: 0.86, anchor: .leading)
+                        .overlay(alignment: .trailing) {
+                            if c.qiReady {
+                                Text("气满").font(.system(size: 10, weight: .black)).foregroundStyle(Palette.red)
+                                    .offset(x: 4, y: 0)
+                                    .transition(.scale(scale: 2.2).combined(with: .opacity))
+                            }
+                        }
+                        .animation(.spring(duration: 0.35, bounce: 0.6), value: c.qiReady)
                 }
             }
             .frame(maxWidth: .infinity)
@@ -90,21 +101,29 @@ struct SkewBar: View {
 }
 
 /// 命数：血条下面一块一块的备用命，每块是那条命的颜色（左边先灭）。打掉一条命熄灭一块。
+/// 每块一样长（血条的四分之一，五条命正好排满），靠右排：三条命两块，两条命只有一小块。
 struct LifePips: View {
     let left: Int
     let total: Int
+    static let spacing: CGFloat = 5
 
     var body: some View {
         let spare = total - 1
-        HStack(spacing: 5) {
-            ForEach(0..<spare, id: \.self) { k in
-                let life = spare - k                        // 这一块代表「还剩 life 条」时那条血
-                let lit = life <= left - 1
-                SkewBar(value: lit ? 1 : 0, color: Palette.life(life), height: 7, skew: 0.25, border: 2, fromTrailing: true)
-                    .scaleEffect(lit ? 1 : 0.85)
-                    .opacity(lit ? 1 : 0.4)
+        GeometryReader { g in
+            let w = min((g.size.width - 3 * Self.spacing) / 4, (g.size.width - CGFloat(max(0, spare - 1)) * Self.spacing) / CGFloat(max(1, spare)))   // 超过五条命才缩短
+            HStack(spacing: Self.spacing) {
+                ForEach(0..<spare, id: \.self) { k in
+                    let life = spare - k                        // 这一块代表「还剩 life 条」时那条血
+                    let lit = life <= left - 1
+                    SkewBar(value: lit ? 1 : 0, color: Palette.life(life), height: 7, skew: 0.25, border: 2, fromTrailing: true)
+                        .frame(width: w)
+                        .scaleEffect(lit ? 1 : 0.85)
+                        .opacity(lit ? 1 : 0.4)
+                }
             }
+            .frame(width: g.size.width, alignment: .trailing)
         }
+        .frame(height: 7)
         .animation(.spring(duration: 0.35, bounce: 0.6), value: left)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("对手还剩 \(left) 条命")
@@ -167,4 +186,54 @@ struct MoveDots: View {
         .accessibilityLabel(total > 0 ? "第 \(marks.count) 招，共 \(total) 招"
                                       : "最近 \(shown.count) 招里 \(shown.filter { marks[$0] }.count) 招完美")
     }
+}
+
+/// 玩家掉血：血条闪一下红，旁边飘起一个红色「-N」再淡掉。
+struct HurtFloat: View {
+    let hurt: (amount: Int, token: Int)?
+    @State private var shown: (amount: Int, token: Int)?
+    @State private var rise = false
+
+    var body: some View {
+        ZStack(alignment: .trailing) {
+            if let h = shown {
+                Rectangle().fill(Palette.red.opacity(rise ? 0 : 0.55))
+                    .allowsHitTesting(false)
+                Text("-\(h.amount)")
+                    .font(Fonts.display(22)).foregroundStyle(Palette.red)
+                    .shadow(color: .white, radius: 0, x: 1, y: 1)
+                    .offset(x: 4, y: rise ? -22 : 0)
+                    .opacity(rise ? 0 : 1)
+                    .id(h.token)
+            }
+        }
+        .onChange(of: hurt?.token) { _, _ in
+            guard let h = hurt else { return }
+            shown = h
+            rise = false
+            withAnimation(.easeOut(duration: 0.9)) { rise = true }
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+/// 气满了：气条上一层白光一亮一暗（不用模糊阴影，省得每帧离屏重画），一直到必杀打出去。
+struct QiReadyGlow: View {
+    @State private var on = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        SkewBar(value: 1, color: .white, height: 7, skew: -0.25, border: 2)
+            .opacity(on ? 0.6 : 0.05)
+            .onAppear {
+                guard !reduceMotion else { on = true; return }
+                withAnimation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true)) { on = true }
+            }
+            .allowsHitTesting(false)
+    }
+}
+
+struct QiBarFrameKey: PreferenceKey {
+    static let defaultValue: CGRect = .zero
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) { let v = nextValue(); if v != .zero { value = v } }
 }

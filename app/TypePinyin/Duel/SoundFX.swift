@@ -6,7 +6,7 @@ import UIKit
 final class SoundFX {
     enum Sound: String, CaseIterable {
         case hitLight = "hit_light", hitHeavy = "hit_heavy", parry, block, hurt, newmove, mistake, finisher, win, retry
-        case levelup, nearmiss, record
+        case levelup, nearmiss, record, qifull, qicard
         case tick0 = "tick_0", tick1 = "tick_1", tick2 = "tick_2", tick3 = "tick_3"
         case tick4 = "tick_4", tick5 = "tick_5", tick6 = "tick_6", tick7 = "tick_7"
     }

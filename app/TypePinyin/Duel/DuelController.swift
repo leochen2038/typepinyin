@@ -126,10 +126,26 @@ final class DuelController {
     }
     /// 正被回顾牌盖住的牌位。单独存一份：回顾每爆一个字母都会改 reviews，词牌不用跟着重算。
     private(set) var coveredSlots: Set<Int> = []
+    /// 气满了、必杀还没打出去：气条和必杀牌一起金光呼吸。
+    private(set) var qiReady = false
+    /// 每露出一张必杀牌加一：金色光点从气条飞到牌上、牌闪一下。
+    private(set) var finisherArrival = 0
+    /// 这一场是群战（旅程里按站定，切片里看调参）。
+    var groupFight: Bool { (plan?.setup.groupFight ?? tuning.groupFight) && tuning.cardsOnTable <= 1 }
+    /// 光点从气条飞到牌上要多久（牌在光点落下时闪）。
+    static let qiFlight = 0.42
 
     /// 回顾收掉、新牌露出来：告诉引擎从这一刻开始算上手时间、连招间隔和对手蓄力。
     private func revealed(_ slot: Int) {
         apply(engine.cardRevealed(slot, at: CACurrentMediaTime()))
+        if engine.cards.indices.contains(slot), engine.cards[slot].isFinisher {
+            finisherArrival += 1
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(Self.qiFlight))
+                self.sounds.play(.qicard)
+                self.sounds.hitHaptic(heavy: false)
+            }
+        }
     }
     @ObservationIgnored private var reviewSeq = 0
     @ObservationIgnored private var lastCards: [Int: CardVM] = [:]
@@ -175,6 +191,8 @@ final class DuelController {
     var summaryActions: [SummaryAction] = []
     /// 入门提示（旅程里第一次遇到时显示一句）。
     var tip: String?
+    /// 玩家刚掉的血（状态栏血条旁飘一个红色「-N」、血条闪一下）；token 每次加一。
+    var hurt: (amount: Int, token: Int)?
     /// 教学引导：第一张牌跟着亮起来的键按。说明跟着按键一步一步出：一句眼前这一步，必要时再加一句。
     var guide: (title: String, line: String?)?
     @ObservationIgnored private var guiding = false
@@ -234,6 +252,7 @@ final class DuelController {
             engine = Self.makeEngine(tuning: tuning, round: round)
         }
         summaryGains = []
+        qiReady = false
         summaryActions = []
         tip = nil
         sounds.hapticsOn = true
@@ -242,7 +261,8 @@ final class DuelController {
         scene.setBackdrop(regionId: plan?.backdrop?.region, station: plan?.backdrop?.station ?? 0)
         scene.speed = 1 / Self.fxSlow            // -slowfx：人物动作也一起放慢
         scene.reset()
-        if (plan?.setup.groupFight ?? tuning.groupFight) && tuning.cardsOnTable <= 1 { scene.groupBegin() }
+        scene.groupFinisherStyle = tuning.groupFinisherStyle
+        if groupFight { scene.groupBegin() }
         summary = nil
         heat = 0
         moveMarks = []
@@ -469,7 +489,8 @@ final class DuelController {
                 if !inStrike { scene.groupAdd(id: id, tier: tier.rawValue, slot: slot, walkIn: false) }
             case .foeDefeated(let id):
                 if !inStrike { scene.groupDown(id) }
-            case .foeAttacked(let id, _):
+            case .foeAttacked(let id, let dmg):
+                showHurt(dmg)
                 scene.groupAttack(id)
                 sounds.play(.hurt)
                 sounds.hitHaptic(heavy: true)
@@ -517,7 +538,7 @@ final class DuelController {
                 updateHeat()
             case .strike(let i, let dmg, let flaw, let finisher, let heavy):
                 if guiding { endGuide() }
-                if finisher { finisherMoves.insert(engine.moveMarks.count - 1) }
+                if finisher { finisherMoves.insert(engine.moveMarks.count - 1); qiReady = false }
                 scene.setCharge(1)
                 let letters = (lastStruck[i] ?? "").map(String.init)
                 let n = max(1, letters.count)
@@ -615,12 +636,16 @@ final class DuelController {
             case .blocked:
                 scene.block()
                 sounds.play(.block)
-            case .hitByIncoming:
+            case .hitByIncoming(let dmg):
+                showHurt(dmg)
                 scene.playerHurt()
                 sounds.play(.hurt)
                 sounds.hitHaptic(heavy: true)
             case .chargeInterrupted:
                 scene.block()
+            case .qiFull:
+                qiReady = true
+                sounds.play(.qifull)
             case .newMove(let s):
                 newMoveToast = s
                 sounds.play(.newmove)
@@ -629,6 +654,7 @@ final class DuelController {
                     if self.newMoveToast == s { self.newMoveToast = nil }
                 }
             case .mistake(_, let dmg):
+                showHurt(dmg)
                 mistakeFlash += 1
                 sounds.play(.mistake)
                 if dmg > 0 { scene.mistake() }
@@ -650,6 +676,11 @@ final class DuelController {
     /// 丢了一条命站起来时说的话。
     private static let standUpLines = ["还没完！", "有两下子！", "再来！", "好身手！"]
 
+    private func showHurt(_ dmg: Int) {
+        guard dmg > 0 else { return }
+        hurt = (dmg, (hurt?.token ?? 0) + 1)
+    }
+
     /// 教学引导：亮出第一张牌下一个该按的键、画左右手分界线；说明按打到哪一步来，一次只说一点。
     private func updateGuide() {
         guard guiding, let card = engine.cards.first else { return }
@@ -659,6 +690,7 @@ final class DuelController {
         guard let keyboard else { guideOnKeyboard = false; return }
         keyboard.guide = true
         keyboard.showHint(next)
+        keyboard.showThumb(next)
         guideOnKeyboard = true
     }
 
@@ -689,6 +721,7 @@ final class DuelController {
         guide = nil
         keyboard?.guide = false
         keyboard?.showHint(nil)
+        keyboard?.showThumb(nil)
     }
 
     private func strikeLanded() {

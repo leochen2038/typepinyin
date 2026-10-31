@@ -17,9 +17,12 @@ public struct JourneyState: Codable, Sendable, Equatable {
     /// 今天新学了几个音节、是哪一天。
     public var newToday = 0
     public var newTodayDay = 0
+    /// 打出过的字（牌、奇遇的句子里打完的），「能打出多少个常用字」按它数。
+    public var typedChars: Set<String> = []
 
     public init(openingDone: Bool = false, openingBattle: Int = 0, tipsSeen: Set<String> = [], fogCleared: Bool = false,
-                probe: Data? = nil, newToday: Int = 0, newTodayDay: Int = 0) {
+                probe: Data? = nil, newToday: Int = 0, newTodayDay: Int = 0, typedChars: Set<String> = []) {
+        self.typedChars = typedChars
         self.openingDone = openingDone
         self.openingBattle = openingBattle
         self.tipsSeen = tipsSeen
@@ -78,6 +81,8 @@ public struct Progress: Sendable, Equatable {
     public var records: [String: SyllableRecord] = [:]
     /// 本设备的手速（不合并）。
     public var speed: SpeedState?
+    /// 练功房：打过的词（按文字）。
+    public var practice: [String: PracticeWord] = [:]
     public init() {}
 }
 
@@ -88,6 +93,7 @@ public struct ProgressChange: Sendable {
     public var regions: [String: RegionState] = [:]
     public var records: [SyllableRecord] = []
     public var speed: SpeedState?
+    public var practice: [PracticeWord] = []
     public init() {}
 }
 
@@ -102,7 +108,7 @@ public final class ProgressStore {
     let container: ModelContainer
     var context: ModelContext { container.mainContext }
 
-    static let schema = Schema([DeviceSyllable.self, DeviceVolume.self, DeviceRegion.self, DeviceJourney.self, DeviceSpeed.self])
+    static let schema = Schema([DeviceSyllable.self, DeviceVolume.self, DeviceRegion.self, DeviceJourney.self, DeviceSpeed.self, DevicePracticeWord.self])
     static let deviceKey = "progress.deviceId"
 
     /// - Parameters:
@@ -181,6 +187,11 @@ public final class ProgressStore {
             let j = Self.journey(from: row)
             p.journey = Self.merge(p.journey, j)
         }
+        for row in (try? context.fetch(FetchDescriptor<DevicePracticeWord>())) ?? [] {
+            let w = Self.practiceWord(from: row)
+            if let old = p.practice[w.text], (old.seen, old.lastSeen) >= (w.seen, w.lastSeen) { continue }   // 两台设备取打得多的那份
+            p.practice[w.text] = w
+        }
         let me = deviceId
         p.speed = (try? context.fetch(FetchDescriptor<DeviceSpeed>(predicate: #Predicate { $0.deviceId == me })))?.first
             .map { SpeedState(secondsPerLetter: $0.secondsPerLetter, startSeconds: $0.startSeconds, samples: $0.samples) }
@@ -204,6 +215,7 @@ public final class ProgressStore {
             row.probeData = j.probe
             row.newToday = j.newToday
             row.newTodayDay = j.newTodayDay
+            row.typedCharsData = try? JSONEncoder().encode(j.typedChars.sorted())
             row.updatedAt = Date()
         }
         for (v, s) in change.volumes {
@@ -230,6 +242,17 @@ public final class ProgressStore {
             row.reviewStep = r.reviewStep
             row.nextReview = r.nextReview
         }
+        for w in change.practice {
+            let t = w.text
+            let row = try fetchOne(DevicePracticeWord.self, #Predicate { $0.deviceId == dev && $0.text == t }) ?? insert(DevicePracticeWord(deviceId: dev, text: t))
+            row.syllablesData = try? JSONEncoder().encode(w.syllables)
+            row.volume = w.volume
+            row.seen = w.seen
+            row.clean = w.clean
+            row.recentData = try? JSONEncoder().encode(w.recent)
+            row.secondsPerLetter = w.secondsPerLetter
+            row.lastSeen = w.lastSeen
+        }
         if let s = change.speed {
             let row = try fetchOne(DeviceSpeed.self, #Predicate { $0.deviceId == dev }) ?? insert(DeviceSpeed(deviceId: dev))
             row.secondsPerLetter = s.secondsPerLetter
@@ -248,6 +271,7 @@ public final class ProgressStore {
         try context.delete(model: DeviceRegion.self, where: #Predicate { $0.deviceId == me })
         try context.delete(model: DeviceJourney.self, where: #Predicate { $0.deviceId == me })
         try context.delete(model: DeviceSpeed.self, where: #Predicate { $0.deviceId == me })
+        try context.delete(model: DevicePracticeWord.self, where: #Predicate { $0.deviceId == me })
         try context.save()
     }
 
@@ -277,10 +301,18 @@ public final class ProgressStore {
         return r
     }
 
+    static func practiceWord(from row: DevicePracticeWord) -> PracticeWord {
+        PracticeWord(text: row.text, syllables: row.syllablesData.flatMap { try? JSONDecoder().decode([String].self, from: $0) } ?? [],
+                     volume: row.volume, seen: row.seen, clean: row.clean,
+                     recent: row.recentData.flatMap { try? JSONDecoder().decode([Bool].self, from: $0) } ?? [],
+                     secondsPerLetter: row.secondsPerLetter, lastSeen: row.lastSeen)
+    }
+
     static func journey(from row: DeviceJourney) -> JourneyState {
         JourneyState(openingDone: row.openingDone, openingBattle: row.openingBattle,
                      tipsSeen: Set(row.tipsSeenData.flatMap { try? JSONDecoder().decode([String].self, from: $0) } ?? []),
-                     fogCleared: row.fogCleared, probe: row.probeData, newToday: row.newToday, newTodayDay: row.newTodayDay)
+                     fogCleared: row.fogCleared, probe: row.probeData, newToday: row.newToday, newTodayDay: row.newTodayDay,
+                     typedChars: Set(row.typedCharsData.flatMap { try? JSONDecoder().decode([String].self, from: $0) } ?? []))
     }
 
     /// 两台设备的同一个音节：熟练度取最高、次数取最大、最近几次按时间合并去重、日子并集、下次复习取最早。
@@ -304,6 +336,7 @@ public final class ProgressStore {
         j.openingBattle = max(a.openingBattle, b.openingBattle)
         j.tipsSeen = a.tipsSeen.union(b.tipsSeen)
         j.fogCleared = a.fogCleared || b.fogCleared
+        j.typedChars = a.typedChars.union(b.typedChars)
         j.probe = a.probe ?? b.probe
         if b.newTodayDay > a.newTodayDay {
             j.newToday = b.newToday
