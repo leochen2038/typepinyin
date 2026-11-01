@@ -39,5 +39,7 @@ extension DuelEngine {
         player.reaction = player.reaction.map { 0.7 * $0 + 0.3 * lat } ?? lat
         let per = min(2.0, max(0.12, (lat + dur) / Double(max(1, word.letterCount))))
         player.secondsPerLetter = 0.8 * player.secondsPerLetter + 0.2 * per
+        typingSeconds += lat + dur                            // 打字速度：从牌露出来到打完（看牌、想、打都算）
+        typingChars += word.text.count
     }
 }

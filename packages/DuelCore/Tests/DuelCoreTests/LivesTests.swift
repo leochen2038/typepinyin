@@ -17,12 +17,31 @@ import Testing
         #expect(e.opponent.lives == 1 && e.opponent.maxLives == 1)
     }
 
-    /// 整场的血平分到每条命上。
-    @Test func hpSplitAcrossLives() {
+    /// 每条命都和单挑的对手一样厚（掌门战就是要长），必杀照样打掉这条命的 finisherShare。
+    @Test func eachLifeHasFullHP() {
         let plain = Fixture.engine(features: [])
         let e = Fixture.engine(features: [], tuning: Self.lives(3))
         #expect(e.opponent.lives == 3)
-        #expect(e.opponent.maxHP == Int((Double(plain.opponent.maxHP) / 3).rounded()))
+        #expect(e.opponent.maxHP == plain.opponent.maxHP)
+        var card = e.cards[0]
+        card.isFinisher = true
+        #expect(e.damage(for: card, combo: 1, store: 1) == Int((Double(e.opponent.maxHP) * 0.25).rounded()))
+    }
+
+    /// 每个对手的血量倍数（内容里定）：一条命和多条命都按它，必杀照样打这条命满血的 25%。
+    @Test func perFoeHPFactor() {
+        let plain = Fixture.engine(features: [])
+        var setup = DuelSetup()
+        setup.hpFactor = 1.4
+        for lives in [1, 3] {
+            setup.lives = lives
+            let e = DuelEngine(bank: Fixture.bank, tuning: Self.lives(lives), opponent: Opponent(name: "林大", title: ""), seed: 1, setup: setup)
+            e.start(at: 100)
+            #expect(e.opponent.maxHP == Int((Double(plain.opponent.maxHP) * 1.4).rounded()))
+            var card = e.cards[0]
+            card.isFinisher = true
+            #expect(e.damage(for: card, combo: 1, store: 1) == Int((Double(e.opponent.maxHP) * 0.25).rounded()))
+        }
     }
 
     @Test func emptyingABarCostsALifeAndOverflowCarries() {

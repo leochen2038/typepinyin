@@ -119,6 +119,8 @@ public struct Fighter: Codable, Sendable, Hashable {
     public var look: Look
     public var intro: String?
     public var lifeLines: [String]?
+    /// 血量倍数：这个对手一条命的血是按手速算出的标准血量的几倍（同一类对手之间可以不一样）；nil = 1。
+    public var hpFactor: Double?
 }
 
 public struct MapSpot: Codable, Sendable, Hashable {
@@ -147,6 +149,8 @@ public struct Region: Codable, Sendable, Hashable, Identifiable {
     public var stationLines: [String]
     public var map: MapSpot
     public var playable: Bool
+    /// 群战每个人（按出场顺序）的血是标准血量的几倍；nil 或不够长 = 按等级的默认（喽啰 0.15、镖师 0.3、头目 0.5）。
+    public var groupHP: [Double]?
 }
 
 /// 总地图上不是地区的地点：初入江湖、武林大会。

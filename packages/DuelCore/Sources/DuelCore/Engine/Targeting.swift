@@ -51,6 +51,18 @@ extension DuelEngine {
             return
         }
         emit(.letterRejected(c))
+        firstLetterWrong()
+    }
+
+    /// 第一个字母就对不上任何牌：跟拼错一样扣一点血、断连招（教学牌除外）。不知道想打哪张，不记到音节上。
+    func firstLetterWrong() {
+        guard !(setup.firstCardFree && moveMarks.isEmpty) else { return }
+        guard cards.contains(where: { !$0.inactive }) || opponent.incoming != nil else { return }
+        let dmg = tuning.mistakeDamage
+        let dead = hurtPlayer(dmg)
+        emit(.mistake("", damage: dmg))
+        breakCombo()
+        if dead { finish(won: false) }
     }
 
     func beginTarget(readyFrom: Double) {
@@ -111,7 +123,7 @@ extension DuelEngine {
         }
     }
 
-    /// 打错一个字母：一律扣血（教学牌除外）；没学过的音节第一次错还记为「新招」。
+    /// 打错一个字母：一律扣血（教学牌除外），记进拼错过的音节；没学过的音节第一次错还安排复现。
     func wrongLetter(word: Word, typed: Int, onIncoming: Bool) {
         let idx = word.syllableIndex(atLetter: typed)
         let s = word.syllables[idx]
@@ -119,6 +131,11 @@ extension DuelEngine {
         if setup.firstCardFree && moveMarks.isEmpty {         // 教学牌：按错不扣血、不断连招、不算新招，键照样亮着
             emit(.letterRejected(Array(word.letters)[typed]))
             return
+        }
+        if let k = missed.firstIndex(where: { $0.spelling == s }) {   // 打顺过又错了：还算手生
+            missed[k].smoothed = false
+        } else {
+            missed.append(MissedSyllable(spelling: s, word: word.text))
         }
         if features.contains(.teaching), learner.isNew(s) {
             let n = (learner.missCount[s] ?? 0) + 1
@@ -128,7 +145,7 @@ extension DuelEngine {
                 emit(.newMove(s))
                 learner.taught.insert(s)
                 if let source {
-                    source.newMove(s)                           // 旅程：复现由出牌来源安排
+                    source.newMove(s, in: word)                 // 旅程：复现由出牌来源安排，先出这个词
                 } else {
                     // 新招：接下来补的第 2 张、第 5 张牌里再出现它
                     for k in tuning.replayOffsets { learner.replayQueue.append((deal: dealCount + k - 1, syllable: s)) }
@@ -167,6 +184,9 @@ extension DuelEngine {
         let gold = wordClean && perLetter <= tuning.goldSecondsPerLetter
         recordSpeed(word: card.word)
         source?.cardDone(card.word, clean: wordClean, secondsPerLetter: perLetter)
+        if wordClean {                                        // 拼错过的音节后来整张牌一次打对：打顺了
+            for k in missed.indices where card.word.syllables.contains(missed[k].spelling) { missed[k].smoothed = true }
+        }
         if heavy, opponent.incoming != nil {                  // 重招打断蓄力
             opponent.incoming = nil
             emit(.chargeInterrupted)

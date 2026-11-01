@@ -20,8 +20,7 @@ import Testing
     @Test func dealsOnlyFromThePool() throws {
         let d0 = try #require(c.dream)
         let pool = Set(d0.words.map(\.text))
-        let d = Dealer(content: c, learner: Learner(), probe: ProbeState(),
-                       context: DealContext(volume: nil, today: 1, lengths: [2: 0.7, 3: 0.3], pool: d0.words), seed: 2)
+        let d = Dealer(content: c, learner: Learner(), context: DealContext(volume: nil, today: 1, lengths: [2: 0.7, 3: 0.3], pool: d0.words), seed: 2)
         for _ in 0..<40 {
             let w = d.next()
             #expect(pool.contains(w.word.text))
@@ -36,8 +35,7 @@ import Testing
         let d0 = try #require(c.dream)
         let t = try #require(d0.tutorial)
         #expect(t.text == "江湖")
-        let d = Dealer(content: c, learner: Learner(), probe: ProbeState(),
-                       context: DealContext(volume: nil, today: 1, pool: d0.words, firstWord: t), seed: 3)
+        let d = Dealer(content: c, learner: Learner(), context: DealContext(volume: nil, today: 1, pool: d0.words, firstWord: t), seed: 3)
         #expect(d.next().word.text == "江湖")
         #expect(d.next().word.text != "江湖")
     }

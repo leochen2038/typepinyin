@@ -162,6 +162,8 @@ final class FigureNode: SKNode {
     let bodyPart = SKSpriteNode()
     let frontArm = SKSpriteNode()
     private let rig = SKNode()
+    /// 包在 rig 外面的一层，只做预备动作的退、压扁、后仰（rig 自己的位置和转角归待机呼吸、晕眩用）。
+    private let pose = SKNode()
 
     init(_ figure: FigureArt.Figure) {
         super.init()
@@ -171,7 +173,8 @@ final class FigureNode: SKNode {
         shadow.position = CGPoint(x: 0, y: 1)
         shadow.zPosition = -1
         addChild(shadow)
-        addChild(rig)
+        addChild(pose)
+        pose.addChild(rig)
         for (node, part) in [(backArm, figure.backArm), (backLeg, figure.backLeg), (frontLeg, figure.frontLeg),
                              (bodyPart, figure.body), (frontArm, figure.frontArm)] {
             let (tex, anchor, size) = FigureArt.texture(for: part)
@@ -199,6 +202,11 @@ final class FigureNode: SKNode {
         rig.position = .zero
         rig.zRotation = 0
         rig.alpha = 1          // 倒地时 rig 淡到 0.3，下一场要恢复
+        pose.removeAllActions()
+        pose.position = .zero
+        pose.zRotation = 0
+        pose.xScale = 1
+        pose.yScale = 1
         alpha = 1
         guard !reduced else { return }
         let up = SKAction.moveBy(x: 0, y: 2.5, duration: 0.6)
@@ -269,8 +277,58 @@ final class FigureNode: SKNode {
     }
 
     /// 每一刀落下的时刻（和 dashAndSlash 一致），出刀前就能算好。
-    static func slashTimes(slashes: Int, per: Double) -> [Double] {
-        (0..<slashes).map { 0.08 + Double($0) * per + per * 0.45 }
+    static func slashTimes(slashes: Int, per: Double, dash: Double = 0.08) -> [Double] {
+        (0..<slashes).map { dash + Double($0) * per + per * 0.45 }
+    }
+
+    // Motion Prompt #121 · MIT License (c) 2026 Shohei Ohtaki · https://showheyohtaki.github.io/motion-prompt/#121
+    /// 预备动作（Motion Prompt #121 アンティシペーション）：出招前往反方向退一点、压扁、后仰攒劲，冲出去时拉长、前倾，
+    /// 到位后上下一抖收住。原版溜め 0.75 秒、飛び出し 0.43 秒；这里整体按 k = wind / 0.75 等比缩短，
+    /// 冲出去那段（0.43k）就是 dashAndSlash 的冲刺时长。back 是退的距离（场景点数）。
+    /// 原版是圆角方块角色，压扁到纵 0.76、拉长到横 1.55；放在人身上看着像整个人缩小再还原（试玩反馈），
+    /// 所以形变改小（纵最低 0.95、横最高 1.1），攒劲主要靠退得多一点（1.5 倍）和后仰更多（0.26rad）。
+    static let windUpFull = 0.75
+    static func launchSeconds(wind: Double) -> Double { wind > 0 ? 0.43 * wind / windUpFull : 0.08 }
+
+    func windUp(seconds wind: Double, back: CGFloat) {
+        guard wind > 0 else { return }
+        let k = wind / Self.windUpFull
+        let go = 0.43 * k, settle = 0.8 * k
+        let b = 1.5 * back / max(0.01, abs(xScale))                  // pose 在人物里面，距离要按人物的缩放折回去
+        let eIO: (CGFloat) -> CGFloat = { x in x < 0.5 ? 2 * x * x : 1 - pow(-2 * x + 2, 2) / 2 }
+        let backOut: (CGFloat, CGFloat) -> CGFloat = { x, s in 1 + (s + 1) * pow(x - 1, 3) + s * pow(x - 1, 2) }
+        // 溜め：easeInOut（2 次）往后退、横 1→1.03、纵 1→0.95、后仰 0.26rad（原版 1.22 / 0.76 / 0.18）
+        let windAct = SKAction.customAction(withDuration: wind) { n, t in
+            let w = eIO(min(1, t / CGFloat(wind)))
+            n.position.x = -b * w
+            n.xScale = 1 + 0.03 * w
+            n.yScale = 1 - 0.05 * w
+            n.zRotation = 0.26 * w
+        }
+        // 飛び出し：backOut(s=1.1) 回到原位（略冲过头），前 60% 拉长到横 1.1、纵 0.96（原版 1.55 / 0.72），前倾 0.12rad
+        let goAct = SKAction.customAction(withDuration: go) { n, t in
+            let g = min(1, t / CGFloat(go))
+            n.position.x = -b * (1 - backOut(g, 1.1))
+            let st = g < 0.6 ? sin(.pi * g / 0.6) : 0
+            n.xScale = 1 + 0.1 * st
+            n.yScale = 1 - 0.04 * st
+            n.zRotation = -0.12 * st
+        }
+        // 着地：0.04·e^(−7t)·sin(17t) 纵横反着抖（原版 0.13；t 同样按 k 缩）
+        let settleAct = SKAction.customAction(withDuration: settle) { n, t in
+            let u = Double(t) / k
+            let wob = CGFloat(0.04 * exp(-7 * u) * sin(17 * u))
+            n.position.x = 0
+            n.zRotation = 0
+            n.xScale = 1 + wob
+            n.yScale = 1 - wob
+        }
+        let reset = SKAction.run { [weak self] in
+            guard let p = self?.pose else { return }
+            p.position = .zero; p.zRotation = 0; p.xScale = 1; p.yScale = 1
+        }
+        pose.removeAction(forKey: "windUp")
+        pose.run(.sequence([windAct, goAct, settleAct, reset]), withKey: "windUp")
     }
 
     /// 大招后收刀：剑慢慢收到身后，停一拍，再回到平常。
@@ -280,8 +338,8 @@ final class FigureNode: SKNode {
     }
 
     /// 冲到对手面前、斩 n 刀、退回。返回每一刀落下的时刻（秒）。
-    func dashAndSlash(distance: CGFloat, slashes: Int, per: Double = 0.11, reduced: Bool) -> [Double] {
-        let dash = 0.08, back = 0.16
+    func dashAndSlash(distance: CGFloat, slashes: Int, per: Double = 0.11, dash: Double = 0.08, reduced: Bool) -> [Double] {
+        let back = 0.16
         removeAction(forKey: "dash")
         frontArm.removeAction(forKey: "swing")
         var times: [Double] = []
@@ -357,15 +415,47 @@ final class FigureNode: SKNode {
                            .run { [weak self] in self?.idle(reduced: reduced) }]))
     }
 
-    func knockDown(reduced: Bool) {
+    // Motion Prompt #123 · MIT License (c) 2026 Shohei Ohtaki · https://showheyohtaki.github.io/motion-prompt/#123
+    /// 倒地：原地往后倒平（不飞出去，群战里不会撞到后面的人），像被砸下去一样越倒越快；
+    /// 触地弹两下（Motion Prompt #123 バウンス：每次反弹速度剩 56%，弹起的高度剩 0.56² ≈ 31%），扬起一小团墨尘，然后淡出（约 0.7 秒演完）。
+    /// 原来是往后斜 0.5 弧度、滑 30 点、淡到三成，人没躺到地上，看着像渐渐消失。
+    /// fade = false：倒下后躺着不消失（主角输了用）。
+    func knockDown(reduced: Bool, fade: Bool = true) {
         rig.removeAllActions()
+        pose.removeAllActions()
+        pose.position = .zero; pose.zRotation = 0; pose.xScale = 1; pose.yScale = 1
         if reduced {
-            run(.fadeAlpha(to: 0.25, duration: 0.3))
+            run(fade ? .sequence([.fadeAlpha(to: 0.25, duration: 0.3), .wait(forDuration: 0.2), .fadeOut(withDuration: 0.2)])
+                     : .fadeAlpha(to: 0.4, duration: 0.3))
             return
         }
-        // 往后倒：本地坐标里 -x 是远离对手的方向（镜像的对手同样成立）
-        let fall = SKAction.group([.rotate(toAngle: 0.5, duration: 0.45), .moveBy(x: -30, y: 0, duration: 0.45), .fadeAlpha(to: 0.3, duration: 0.6)])
-        fall.timingMode = .easeOut
-        rig.run(fall)
+        let fallT = 0.3
+        let fall = SKAction.rotate(toAngle: 1.42, duration: fallT)       // 本地坐标里 -x 是远离对手的方向，正转就是往后倒
+        fall.timingMode = .easeIn
+        let h1: CGFloat = 8, h2 = h1 * 0.56 * 0.56
+        func hop(_ h: CGFloat, _ t: Double) -> SKAction {
+            let up = SKAction.moveBy(x: 0, y: h, duration: t); up.timingMode = .easeOut
+            let down = SKAction.moveBy(x: 0, y: -h, duration: t); down.timingMode = .easeIn
+            return .sequence([up, down])
+        }
+        rig.run(.sequence([fall, .run { [weak self] in self?.inkDust() }, hop(h1, 0.07), hop(h2, 0.04)]))
+        if fade { run(.sequence([.wait(forDuration: fallT + 0.2), .fadeOut(withDuration: 0.22)])) }
+    }
+
+    /// 倒地扬起的一小团墨尘：沿着倒下的身子几团淡墨往外鼓、往上飘、散掉。
+    private func inkDust() {
+        for i in 0..<5 {
+            let r = CGFloat.random(in: 9...15)
+            let puff = SKShapeNode(circleOfRadius: r)
+            puff.fillColor = Palette.uiInk.withAlphaComponent(0.5)
+            puff.strokeColor = .clear
+            puff.position = CGPoint(x: -20 - CGFloat(i) * 26 + .random(in: -6...6), y: 6)
+            puff.zPosition = -0.5
+            puff.setScale(0.4)
+            addChild(puff)
+            let drift = SKAction.moveBy(x: .random(in: -10...10), y: .random(in: 10...22), duration: 0.45)
+            drift.timingMode = .easeOut
+            puff.run(.sequence([.group([.scale(to: 1.4, duration: 0.45), drift, .fadeOut(withDuration: 0.45)]), .removeFromParent()]))
+        }
     }
 }

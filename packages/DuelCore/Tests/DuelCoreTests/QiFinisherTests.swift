@@ -122,4 +122,19 @@ import Testing
         let f = Fixture.engine(["吃饭", "妈妈", "开心"], features: [])
         #expect(f.cards[0].weight(t) == .light)
     }
+
+    @Test func freezePausesClockAndIgnoresKeys() {
+        let e = Fixture.engine(features: [])
+        let clock = FakeClock()
+        clock.type(e, "p")
+        e.pause(.freeze, at: clock.now)
+        #expect(e.phase == .paused(.freeze))
+        clock.type(e, "e")                               // 定格时按键不算
+        #expect(e.cards[0].typed == "p")
+        clock.now += 1.4
+        e.resume(at: clock.now)
+        #expect(e.phase == .fighting)
+        clock.type(e, "e")
+        #expect(e.cards[0].typed == "pe")
+    }
 }

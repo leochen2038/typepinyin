@@ -16,6 +16,25 @@ import Testing
         #expect(DuelEngine.groupLineup(total: 5) == [.minion, .minion, .guardsman, .minion, .boss])
     }
 
+    /// 每个人的血可以按出场顺序单独定；必杀打每个人自己满血的 finisherShare。
+    @Test func perPersonHPAndFinisherShare() {
+        let base = engine().0.unitHP
+        var t = Tuning.standard
+        t.groupFight = true
+        t.groupTotal = 5
+        var setup = DuelSetup()
+        setup.groupHP = [0.2, 0.4, 0.6, 0.8, 1.0]
+        let e = DuelEngine(bank: Fixture.bank, tuning: t, opponent: Opponent(name: "林大", title: ""), seed: 1,
+                           features: [.incoming, .qi], setup: setup)
+        e.start(at: 100)
+        e.opponent.maxHP = base
+        e.startGroup()
+        #expect(e.foes.map(\.maxHP) == [0.2, 0.4, 0.6].map { Int((Double(base) * $0).rounded()) })
+        #expect(e.opponent.hp == [0.2, 0.4, 0.6, 0.8, 1.0].map { Int((Double(base) * $0).rounded()) }.reduce(0, +))
+        e.groupStrike(damage: 0, finisher: true)
+        for f in e.foes { #expect(f.hp == f.maxHP - Int((Double(f.maxHP) * e.tuning.finisherShare).rounded())) }
+    }
+
     @Test func threeOnFieldRestQueued() {
         let (e, _) = engine()
         #expect(e.foes.count == 3)

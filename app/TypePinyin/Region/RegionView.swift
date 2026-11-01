@@ -18,13 +18,10 @@ struct RegionView: View {
         if let region = j.currentRegion, let route = j.route {
             GeometryReader { g in
                 let w = g.size.width
+                // 长卷画到屏幕最底下（盖住底部安全区），卡片仍停在安全区以内；镜头按看得见的整段高度算
+                let viewH = g.size.height + g.safeAreaInsets.bottom
                 ZStack(alignment: .top) {
-                    RegionScrollView(region: region, route: route, cleared: j.stationIndex, hero: hero, width: w)
-                        .offset(y: -cameraY)
-                        .frame(width: w, height: g.size.height, alignment: .top)
-                        .clipped()
-                        .contentShape(Rectangle())
-                        .onTapGesture { skipWalk() }
+                    Color.clear
                     if banner {
                         Text(region.name).font(Fonts.display(44)).foregroundStyle(Palette.ink)
                             .padding(.horizontal, 28).padding(.vertical, 8)
@@ -57,8 +54,16 @@ struct RegionView: View {
                     }
                     RegionTopBar(j: j, region: region, route: route)
                 }
-                .onAppear { arrive(height: g.size.height, width: w) }
-                .onChange(of: j.walkFrom) { _, from in if from != nil { walk(height: g.size.height, width: w) } }
+                .background(alignment: .top) {
+                    RegionScrollView(region: region, route: route, cleared: j.stationIndex, hero: hero, width: w)
+                        .offset(y: -cameraY)
+                        .frame(width: w, height: viewH, alignment: .top)
+                        .clipped()
+                        .contentShape(Rectangle())
+                        .onTapGesture { skipWalk() }
+                }
+                .onAppear { arrive(height: viewH, width: w) }
+                .onChange(of: j.walkFrom) { _, from in if from != nil { walk(height: viewH, width: w) } }
             }
             .background(Palette.mist)
             .animation(.easeOut(duration: 0.3), value: j.pendingCard?.title)

@@ -13,12 +13,9 @@ extension DuelEngine {
         foeDownUntil = 0
     }
 
-    /// 一条命的血：整场的血平分到每条命上，一场的长短和一条命时差不多。
-    func perLifeHP(_ hp: Int) -> Int {
-        let lives = setup.lives ?? tuning.foeLives
-        guard livesOn, lives > 1 else { return hp }
-        return max(1, Int((Double(hp) / Double(min(5, lives))).rounded()))
-    }
+    /// 一条命的血：按手速算出的标准血量 × 这个对手自己的血量倍数；几条命就打几倍长（掌门战就是要长；
+    /// 原来把整场的血平分到每条命上，一条命太薄，必杀只有普通招式那么重）。必杀打的是这条命满血的 finisherShare。
+    func perLifeHP(_ hp: Int) -> Int { max(1, Int((Double(hp) * setup.hpFactor).rounded())) }
 
     /// 蓄力时长的倍数：丢了几条命就快几次。
     var lifePressureFactor: Double {

@@ -2,6 +2,8 @@ import Foundation
 
 public enum PauseReason: Sendable, Equatable {
     case background
+    /// 必杀定格：画面停住的那一会儿，计时、蓄力跟着停，按键不算。
+    case freeze
 }
 
 public enum DuelPhase: Sendable, Equatable {
@@ -108,4 +110,21 @@ public struct DuelSummary: Sendable, Equatable {
     public var won: Bool
     public var movesDone: Int = 0
     public var goldMoves: Int = 0
+    /// 这一场拼错过的音节（按第一次错的先后），记着错在哪个词里、后来有没有整张牌一次打对。
+    public var missed: [MissedSyllable] = []
+    /// 这一场的平均打字速度（字/分）：打完的牌的字数 ÷ 从牌露出来到打完的时间；0 = 没打完一张。
+    public var charsPerMinute: Double = 0
+}
+
+/// 拼错过的音节：结算里打对过的算「打顺了」，没打对的列进「还手生」。
+public struct MissedSyllable: Sendable, Equatable {
+    public var spelling: String
+    public var word: String
+    public var smoothed: Bool
+
+    public init(spelling: String, word: String, smoothed: Bool = false) {
+        self.spelling = spelling
+        self.word = word
+        self.smoothed = smoothed
+    }
 }

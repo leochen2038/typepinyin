@@ -53,7 +53,10 @@ import SwiftData
     var openingBattle: Int = 0
     var tipsSeenData: Data?
     var fogCleared: Bool = false
+    /// 原来存渐进摸底的状态，摸底去掉后不再用（列先留着，旧存档照样能打开）。
     var probeData: Data?
+    /// 最后进去过的地区（地图上标红边圆章）。
+    var lastRegion: String = ""
     var newToday: Int = 0
     var newTodayDay: Int = 0
     var typedCharsData: Data?
@@ -73,6 +76,8 @@ import SwiftData
     var recentData: Data?
     var secondsPerLetter: Double = 0
     var lastSeen: Double = 0
+    /// 累计几场打对（词卡的熟练、精通按它算）。
+    var cleanDuels: Int = 0
 
     init(deviceId: String, text: String) {
         self.deviceId = deviceId

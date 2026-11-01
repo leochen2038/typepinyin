@@ -12,8 +12,8 @@ public struct JourneyState: Codable, Sendable, Equatable {
     public var tipsSeen: Set<String> = []
     /// 云雾散开演过了。
     public var fogCleared = false
-    /// 渐进摸底的状态（LearningCore 编码）。
-    public var probe: Data?
+    /// 最后进去过的地区（地图上这座岛的圆章是红边、带一圈光）；空 = 还没进过。
+    public var lastRegion = ""
     /// 今天新学了几个音节、是哪一天。
     public var newToday = 0
     public var newTodayDay = 0
@@ -21,13 +21,13 @@ public struct JourneyState: Codable, Sendable, Equatable {
     public var typedChars: Set<String> = []
 
     public init(openingDone: Bool = false, openingBattle: Int = 0, tipsSeen: Set<String> = [], fogCleared: Bool = false,
-                probe: Data? = nil, newToday: Int = 0, newTodayDay: Int = 0, typedChars: Set<String> = []) {
+                lastRegion: String = "", newToday: Int = 0, newTodayDay: Int = 0, typedChars: Set<String> = []) {
         self.typedChars = typedChars
         self.openingDone = openingDone
         self.openingBattle = openingBattle
         self.tipsSeen = tipsSeen
         self.fogCleared = fogCleared
-        self.probe = probe
+        self.lastRegion = lastRegion
         self.newToday = newToday
         self.newTodayDay = newTodayDay
     }
@@ -212,7 +212,7 @@ public final class ProgressStore {
             row.openingBattle = j.openingBattle
             row.tipsSeenData = try? JSONEncoder().encode(j.tipsSeen.sorted())
             row.fogCleared = j.fogCleared
-            row.probeData = j.probe
+            row.lastRegion = j.lastRegion
             row.newToday = j.newToday
             row.newTodayDay = j.newTodayDay
             row.typedCharsData = try? JSONEncoder().encode(j.typedChars.sorted())
@@ -252,6 +252,7 @@ public final class ProgressStore {
             row.recentData = try? JSONEncoder().encode(w.recent)
             row.secondsPerLetter = w.secondsPerLetter
             row.lastSeen = w.lastSeen
+            row.cleanDuels = w.cleanDuels
         }
         if let s = change.speed {
             let row = try fetchOne(DeviceSpeed.self, #Predicate { $0.deviceId == dev }) ?? insert(DeviceSpeed(deviceId: dev))
@@ -305,13 +306,15 @@ public final class ProgressStore {
         PracticeWord(text: row.text, syllables: row.syllablesData.flatMap { try? JSONDecoder().decode([String].self, from: $0) } ?? [],
                      volume: row.volume, seen: row.seen, clean: row.clean,
                      recent: row.recentData.flatMap { try? JSONDecoder().decode([Bool].self, from: $0) } ?? [],
-                     secondsPerLetter: row.secondsPerLetter, lastSeen: row.lastSeen)
+                     secondsPerLetter: row.secondsPerLetter, lastSeen: row.lastSeen,
+                     // 加「累计几场打对」之前的旧词：打对过就先算一场
+                     cleanDuels: row.cleanDuels > 0 ? row.cleanDuels : min(row.clean, 1))
     }
 
     static func journey(from row: DeviceJourney) -> JourneyState {
         JourneyState(openingDone: row.openingDone, openingBattle: row.openingBattle,
                      tipsSeen: Set(row.tipsSeenData.flatMap { try? JSONDecoder().decode([String].self, from: $0) } ?? []),
-                     fogCleared: row.fogCleared, probe: row.probeData, newToday: row.newToday, newTodayDay: row.newTodayDay,
+                     fogCleared: row.fogCleared, lastRegion: row.lastRegion, newToday: row.newToday, newTodayDay: row.newTodayDay,
                      typedChars: Set(row.typedCharsData.flatMap { try? JSONDecoder().decode([String].self, from: $0) } ?? []))
     }
 
@@ -337,7 +340,7 @@ public final class ProgressStore {
         j.tipsSeen = a.tipsSeen.union(b.tipsSeen)
         j.fogCleared = a.fogCleared || b.fogCleared
         j.typedChars = a.typedChars.union(b.typedChars)
-        j.probe = a.probe ?? b.probe
+        if j.lastRegion.isEmpty { j.lastRegion = b.lastRegion }
         if b.newTodayDay > a.newTodayDay {
             j.newToday = b.newToday
             j.newTodayDay = b.newTodayDay

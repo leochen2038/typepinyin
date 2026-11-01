@@ -11,6 +11,8 @@ public struct DuelSetup: Sendable {
     public var targetSeconds: Double?
     /// 玩家血量最低到几（初入江湖不会输 = 1）；0 = 照常。
     public var minHP = 0
+    /// 对手一条命的血是标准血量的几倍（内容里每个对手各自定）。
+    public var hpFactor = 1.0
     /// 对手几条命、蓄力打不断；nil = 调参里的。
     public var lives: Int?
     public var bossPressure: Bool?
@@ -18,6 +20,8 @@ public struct DuelSetup: Sendable {
     public var groupFight: Bool?
     /// 群战一共几个人；nil = 调参里的。
     public var groupTotal: Int?
+    /// 群战每个人（按出场顺序）的血是标准血量的几倍；nil 或不够长 = 按等级的默认。
+    public var groupHP: [Double]?
     /// 第一张牌不蓄力（教学：跟着亮起来的键慢慢按）。
     public var firstCardFree = false
     /// 今天是哪一天（交回的打字结果带上）。
@@ -36,8 +40,8 @@ public protocol CardSource: AnyObject {
     func cardDone(_ word: Word, clean: Bool)
     /// 同上，带上这张牌每个字母的用时（练功房按它判断顺不顺）。
     func cardDone(_ word: Word, clean: Bool, secondsPerLetter: Double)
-    /// 一个音节成了新招（由出牌来源安排复现）。
-    func newMove(_ spelling: String)
+    /// 一个没学过的音节第一次拼错（由出牌来源安排复现，先出拼错的这个词）。
+    func newMove(_ spelling: String, in word: Word)
 }
 
 public extension CardSource {

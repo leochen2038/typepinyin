@@ -7,7 +7,7 @@ final class JourneyCardSource: CardSource {
     let dealer: Dealer
     /// 每卷现在的重数（牌上显示、回顾爆字母用）。
     let rankOf: (String) -> Int
-    /// 这一场新招的音节（交给出字器排复现）。
+    /// 这一场拼错过的没学过的音节（交给出字器排复现）。
     private(set) var newMoves: [String] = []
     /// 每打完一张牌（练功房记打过的词）。
     let onCard: (Word, Bool, Double) -> Void
@@ -33,17 +33,22 @@ final class JourneyCardSource: CardSource {
     }
 
     func cardDone(_ word: Word, clean: Bool) {
-        dealer.note(ContentWord(text: word.text, syllables: word.syllables, volume: word.volume, isIdiom: word.isIdiom, freq: 0), clean: clean)
+        dealer.note(Self.content(word), clean: clean)
     }
 
     func cardDone(_ word: Word, clean: Bool, secondsPerLetter: Double) {
-        cardDone(word, clean: clean)
+        dealer.note(Self.content(word), clean: clean, secondsPerLetter: secondsPerLetter)
         onCard(word, clean, secondsPerLetter)
     }
 
-    func newMove(_ spelling: String) {
+    static func content(_ w: Word) -> ContentWord {
+        ContentWord(text: w.text, syllables: w.syllables, volume: w.volume, isIdiom: w.isIdiom, freq: 0)
+    }
+
+    /// 没学过的音节第一次拼错：交给出字器排复现，先出拼错的这个词。
+    func newMove(_ spelling: String, in word: Word) {
         newMoves.append(spelling)
-        dealer.newMove(spelling)
+        dealer.newMove(spelling, word: word.text)
     }
 }
 

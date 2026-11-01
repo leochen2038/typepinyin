@@ -11,7 +11,7 @@ extension Learner {
         switch r.proficiency {
         case .locked: return NextStep(text: "打对一次就解锁")
         case .met:
-            if r.correctDays.count < tuning.fluentDays { return NextStep(text: "隔一天再打对一次，就熟练了") }
+            if tuning.fluentDays > 1, !r.correctDays.isEmpty, r.correctDays.count < tuning.fluentDays { return NextStep(text: "隔一天再打对一次，就熟练了") }
             return NextStep(text: "再连着打对几次、上手快一点，就熟练了")
         case .fluent: return NextStep(text: "再连着打对几次、打得更快，就精通了")
         case .master: return nil

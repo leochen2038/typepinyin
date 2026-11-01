@@ -6,8 +6,6 @@ public struct DealContext: Codable, Sendable, Equatable {
     public var today: DayIndex
     /// 今天已经新学了几个音节（跨场累计，由调用方存档）。
     public var newToday = 0
-    /// 这一场最多探几个摸底音节（初入江湖第一场 0、后面 1）。
-    public var probeLimit: Int
     /// 招式牌几个字的比重，比如前面的站 [2: 0.85, 3: 0.15]，掌门 [3: 0.4, 4: 0.35, 5: 0.25]。
     public var lengths: [Int: Double]
     /// 只许用这些音节（第一关：第一卷的 30 个）；nil = 不限。牌、复习、必杀都照这个来。
@@ -18,17 +16,19 @@ public struct DealContext: Codable, Sendable, Equatable {
     public var firstWord: ContentWord?
     /// 练功房：pool 里每个词的比重（按词的文字）；有它时按比重抽、可以重复穿插，只避开刚出的那张和场上的。
     public var weights: [String: Double]?
+    /// 已经收过的词卡（按词的文字）：地区里挑词时没收过的优先。
+    public var collected: Set<String>
 
-    public init(volume: String?, today: DayIndex, newToday: Int = 0, probeLimit: Int = 3, lengths: [Int: Double] = [2: 1],
+    public init(volume: String?, today: DayIndex, newToday: Int = 0, lengths: [Int: Double] = [2: 1],
                 allowedSyllables: Set<String>? = nil, pool: [ContentWord]? = nil, firstWord: ContentWord? = nil,
-                weights: [String: Double]? = nil) {
+                weights: [String: Double]? = nil, collected: Set<String> = []) {
+        self.collected = collected
         self.pool = pool
         self.weights = weights
         self.firstWord = firstWord
         self.volume = volume
         self.today = today
         self.newToday = newToday
-        self.probeLimit = probeLimit
         self.lengths = lengths
         self.allowedSyllables = allowedSyllables
     }
@@ -36,7 +36,7 @@ public struct DealContext: Codable, Sendable, Equatable {
 
 /// 一张牌为什么出现。
 public enum DealReason: String, Sendable {
-    case replay, review, probe, newInVolume, knownInVolume, filler
+    case replay, review, newInVolume, knownInVolume, filler
 }
 
 public struct DealtWord: Sendable {
@@ -49,7 +49,6 @@ public struct DealtWord: Sendable {
 /// 出字器：一场比武里一张一张决定出什么牌（待复现、复习、本卷已会/没会、垫底，加上新音节的护栏和打对率反馈）。
 public final class Dealer: @unchecked Sendable {
     public private(set) var learner: Learner
-    public private(set) var probe: ProbeState
     public private(set) var context: DealContext
     let content: LearningContent
     var tuning: LearningTuning { learner.tuning }
@@ -58,21 +57,22 @@ public final class Dealer: @unchecked Sendable {
     // 这一场的状态
     var dealt = 0
     var newThisDuel = 0
-    var probesThisDuel = 0
     /// 这一张想出几个字的（按 context.lengths 抽）；凑不出就退回别的字数。
     var targetLength = 2
     var sinceNew = 99
     var afterMissLeft = 0
     var recentWords: [String] = []
     var recentResults: [Bool] = []
-    var replay: [(due: Int, spelling: String)] = []
+    /// 待复现：拼错的音节，带上拼错时的那个词（先出原词，出不了再找含这个音节的别的词）。
+    var replay: [(due: Int, spelling: String, word: String?)] = []
     /// 这一场出过的新音节（第一次出现时记一次「今天新学」）。
     var introduced: Set<String> = []
+    /// 其中第一次就又快又对、已经退回名额的。
+    var freedNew: Set<String> = []
 
-    public init(content: LearningContent, learner: Learner, probe: ProbeState, context: DealContext, seed: UInt64) {
+    public init(content: LearningContent, learner: Learner, context: DealContext, seed: UInt64) {
         self.content = content
         self.learner = learner
-        self.probe = probe
         self.context = context
         self.rng = SplitMix(seed: seed)
     }
@@ -133,8 +133,9 @@ public final class Dealer: @unchecked Sendable {
         }
         // 1. 待复现
         if let k = replay.firstIndex(where: { $0.due <= dealt }) {
-            let s = replay.remove(at: k).spelling
-            if let w = pickWord(containing: s, avoid: avoid) { return finish(w, .replay) }
+            let r = replay.remove(at: k)
+            if let t = r.word, let w = content.words.first(where: { $0.text == t }), !avoid(w), allowed(w) { return finish(w, .replay) }
+            if let w = pickWord(containing: r.spelling, avoid: avoid) { return finish(w, .replay) }
         }
         // 2. 到期复习（地区里按配比，初入江湖没有）
         if context.volume != nil {
@@ -143,18 +144,9 @@ public final class Dealer: @unchecked Sendable {
         return dealInOpening(avoid: avoid)
     }
 
-    /// 初入江湖：高频的会的字为主，隔几张插一个摸底音节。
+    /// 没指定地区、也没有词池：只出全是会的音节的高频词。
     func dealInOpening(avoid: (ContentWord) -> Bool) -> DealtWord {
-        if newAllowed && dealt >= 2 && probesThisDuel < context.probeLimit {
-            let cands = probe.candidates(learner: learner, content: content, tuning: tuning)
-            for s in cands.shuffled(using: &rng) {
-                if let w = pickWord(containing: s, avoid: avoid, allowNew: s) {
-                    probesThisDuel += 1
-                    return finish(w, .probe)
-                }
-            }
-        }
-        return finish(pickEasy(avoid: avoid, topN: 400), .filler)
+        finish(pickEasy(avoid: avoid, topN: 400), .filler)
     }
 
     /// 地区里：本卷已会 / 本卷没会 / 复习 / 垫底，按配比抽。
@@ -209,26 +201,44 @@ public final class Dealer: @unchecked Sendable {
         return 2
     }
 
-    /// 含这个音节的常用词：其余音节都不能是新的（allowNew 指定的那个除外），从最常用的几个里随机挑；先按想要的字数挑。
+    /// 含这个音节的常用词：其余音节都不能是新的（allowNew 指定的那个除外）；先按想要的字数挑。
     func pickWord(containing s: String, avoid: (ContentWord) -> Bool, allowNew: String? = nil) -> ContentWord? {
         let idx = content.wordsBySyllable[s] ?? []
         let ok = idx.map { content.words[$0] }.filter { w in
             !avoid(w) && allowed(w) && w.syllables.allSatisfy { $0 == allowNew || !isNew($0) }
         }
         let exact = ok.filter { $0.text.count == targetLength }
-        if !exact.isEmpty { return exact.prefix(8).randomElement(using: &rng) }
+        if !exact.isEmpty { return preferFresh(exact) }
         if targetLength > 2 { return nil }                   // 想要长词但这个音节凑不出：让上一级换别的出法
-        return ok.prefix(8).randomElement(using: &rng)
+        return preferFresh(ok)
+    }
+
+    /// 词卡：候选（已按常用程度排好）里，newCardShare 的机会从没收过的里挑最常用的前 3 个之一；
+    /// 其余从收过的里随机挑（升熟练、精通交给练功房，这里不专挑快升级的）。没收过的挑完了就一直出收过的，反过来也一样。
+    func preferFresh(_ words: [ContentWord]) -> ContentWord? {
+        let fresh = words.filter { !context.collected.contains($0.text) }
+        let old = words.filter { context.collected.contains($0.text) }
+        let roll = Double(rng.next() % 10_000) / 10_000
+        if !fresh.isEmpty && (old.isEmpty || roll < tuning.newCardShare) { return fresh.prefix(3).randomElement(using: &rng) }
+        return old.randomElement(using: &rng) ?? fresh.prefix(3).randomElement(using: &rng)
+    }
+
+    /// 垫底的候选不按常用程度挑最前面的，在里面随机：没收过的照样优先。
+    func preferFreshAmong(_ words: [ContentWord]) -> ContentWord? {
+        let fresh = words.filter { !context.collected.contains($0.text) }
+        let roll = Double(rng.next() % 10_000) / 10_000
+        if !fresh.isEmpty && roll < tuning.newCardShare { return fresh.randomElement(using: &rng) }
+        return words.randomElement(using: &rng)
     }
 
     /// 垫底：全是会的音节的高频词（先按想要的字数挑，凑不出退回二字）。
     func pickEasy(avoid: (ContentWord) -> Bool, topN: Int) -> ContentWord {
         if targetLength > 2 {
             let long = content.words.filter { !$0.isIdiom && $0.text.count == targetLength && wordIsEasy($0) && !avoid($0) }
-            if let w = long.prefix(40).randomElement(using: &rng) { return w }
+            if let w = preferFreshAmong(Array(long.prefix(40))) { return w }
         }
         let pool = content.words.filter { !$0.isIdiom && $0.text.count == 2 && $0.freq <= topN && wordIsEasy($0) && !avoid($0) }
-        if let w = pool.randomElement(using: &rng) { return w }
+        if let w = preferFreshAmong(pool) { return w }
         return content.words.first { !$0.isIdiom && wordIsEasy($0) && !avoid($0) } ?? content.words[0]
     }
 
@@ -268,19 +278,23 @@ public final class Dealer: @unchecked Sendable {
 
     // MARK: 回报
 
-    /// 一张牌打完：有没有打错或看提示。摸底的音节记下结果。
-    public func note(_ w: ContentWord, clean: Bool) {
+    /// 一张牌打完：有没有打错或看提示。这一场刚带进来的新音节，第一次就又快又对（每个字母不超过 knownSecondsPerLetter 秒）
+    /// 算本来就会：不占这一场和今天的新音节名额（拼音熟的人不被名额卡住）。
+    public func note(_ w: ContentWord, clean: Bool, secondsPerLetter: Double? = nil) {
         recentResults.append(clean)
         if recentResults.count > 60 { recentResults.removeFirst() }
         if !clean { afterMissLeft = tuning.afterMissKnown }
-        for s in Set(w.syllables) where introduced.contains(s) {
-            probe.note(s, correct: clean, content: content, tuning: tuning)
+        if clean, let spl = secondsPerLetter, spl <= tuning.knownSecondsPerLetter {
+            let known = Set(w.syllables).filter { introduced.contains($0) && !freedNew.contains($0) }
+            freedNew.formUnion(known)
+            newThisDuel = max(0, newThisDuel - known.count)
+            context.newToday = max(0, context.newToday - known.count)
         }
     }
 
-    /// 一个音节成了新招：接下来第几张复现它。
-    public func newMove(_ s: String) {
-        for k in tuning.replayOffsets { replay.append((due: dealt + k - 1, spelling: s)) }
+    /// 一个音节拼错了（新招）：接下来第几张复现它，先出拼错的那个词。
+    public func newMove(_ s: String, word: String? = nil) {
+        for k in tuning.replayOffsets { replay.append((due: dealt + k - 1, spelling: s, word: word)) }
     }
 
     /// 比武结束后把学习记录换成最新的（下一场用）。

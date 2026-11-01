@@ -102,24 +102,6 @@ struct PressureBar: View {
     }
 }
 
-/// 金色「新招」：没学过的音节第一次拼错时浮出，不是错误。
-struct NewMoveToast: View {
-    let syllable: String
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Text("新招").font(Fonts.display(30)).foregroundStyle(Palette.ink)
-            Text(syllable).font(Fonts.mono(22, weight: .heavy)).foregroundStyle(Palette.navy)
-        }
-        .padding(.horizontal, 16).padding(.vertical, 6)
-        .background(Palette.gold)
-        .overlay(Rectangle().stroke(Palette.ink, lineWidth: 3))
-        .compositingGroup()
-        .shadow(color: Palette.ink, radius: 0, x: 4, y: 4)
-        .transition(.scale(scale: 0.6).combined(with: .opacity))
-    }
-}
-
 /// 按偏了：轻轻冒一下「差一点」，不罚。
 struct NearMissToast: View {
     var body: some View {

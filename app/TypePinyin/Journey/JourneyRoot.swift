@@ -52,6 +52,7 @@ struct JourneyRoot: View {
                 CodexView(j: j)
             }
         }
+        .overlay { InkCurtainHost(phase: j.inkPhase, since: j.inkSince).ignoresSafeArea() }
         .sheet(isPresented: $j.showPanel) { TuningPanelView(c: j.duel) }
         .alert("进度没读到，从头开始", isPresented: $j.showRecoveredNotice) {
             Button("好", role: .cancel) {}

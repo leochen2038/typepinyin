@@ -2,7 +2,7 @@ import Foundation
 
 /// 群战（试玩）：一张牌照常打，场上最多 groupSize 个敌人各自蓄力；打完一张牌自动打蓄力最多的那个并打断它的蓄力，
 /// 必杀打全场；倒下一个，队里的下一个补到空出来的站位上。一共 groupTotal 个，打完最后一个才赢。
-/// 一场多长用敌人的等级来控制（喽啰血少、头目血多），不单独调每个人的血。
+/// 每个人的血默认按等级（喽啰血少、头目血多），内容里也可以按出场顺序单独定（groupHP）；必杀打每个人满血的 finisherShare。
 extension DuelEngine {
     var groupMode: Bool { (setup.groupFight ?? tuning.groupFight) && singleCard }
 
@@ -17,6 +17,7 @@ extension DuelEngine {
     func startGroup() {
         unitHP = opponent.maxHP
         foeQueue = Self.groupLineup(total: setup.groupTotal ?? tuning.groupTotal)
+        groupLineupCount = foeQueue.count
         foes = []
         let n = min(max(1, tuning.groupSize), foeQueue.count)
         for slot in 0..<n { joinFoe(slot: slot, stagger: Double(slot) / Double(n)) }
@@ -27,8 +28,9 @@ extension DuelEngine {
     /// 队里的下一个站到 slot 上。stagger 是开局错开的比例：蓄力晚这么多份才开始，免得几条一起满。
     func joinFoe(slot: Int, stagger: Double = 0) {
         guard !foeQueue.isEmpty else { return }
+        let order = groupLineupCount - foeQueue.count
         let tier = foeQueue.removeFirst()
-        let hp = max(1, Int((Double(unitHP) * tier.hpFactor).rounded()))
+        let hp = groupFoeHP(order: order, tier: tier)
         var f = Foe(id: nextFoeId, tier: tier, slot: slot, maxHP: hp, hp: hp, pressureStart: clock, pressureDuration: 1)
         nextFoeId += 1
         f.pressureDuration = foePressureDuration(tier, onField: foes.count + 1)
@@ -50,9 +52,16 @@ extension DuelEngine {
         foes[i].pressureStart = clock
     }
 
+    /// 出场第 order 个（从 0 数）的血：内容里单独定了就按它，否则按等级。
+    func groupFoeHP(order: Int, tier: FoeTier) -> Int {
+        let factor = setup.groupHP.flatMap { order < $0.count ? $0[order] : nil } ?? tier.hpFactor
+        return max(1, Int((Double(unitHP) * factor).rounded()))
+    }
+
     /// 对手的总血条 = 场上剩下的血 + 还没上场的满血，状态栏照旧显示一条。
     func refreshGroupHP() {
-        let queued = foeQueue.reduce(0) { $0 + max(1, Int((Double(unitHP) * $1.hpFactor).rounded())) }
+        let first = groupLineupCount - foeQueue.count
+        let queued = foeQueue.enumerated().reduce(0) { $0 + groupFoeHP(order: first + $1.offset, tier: $1.element) }
         opponent.hp = max(0, foes.reduce(0) { $0 + max(0, $1.hp) } + queued)
         opponent.name = "群战"
         opponent.title = "还剩 \(foes.count + foeQueue.count) 人"
@@ -62,8 +71,10 @@ extension DuelEngine {
     func groupStrike(damage: Int, finisher: Bool) {
         lastStruck = []; lastDowned = []; lastJoined = []
         if finisher {
-            let hit = max(1, Int((Double(unitHP) * tuning.finisherShare).rounded()))
-            for i in foes.indices { foes[i].hp -= hit; restartFoePressure(i) }
+            for i in foes.indices {                           // 每个人掉自己满血的 finisherShare
+                foes[i].hp -= max(1, Int((Double(foes[i].maxHP) * tuning.finisherShare).rounded()))
+                restartFoePressure(i)
+            }
             lastStruck = foes.map(\.id)
         } else if let i = foes.indices.max(by: { a, b in
             let pa = foes[a].pressureProgress(at: clock), pb = foes[b].pressureProgress(at: clock)

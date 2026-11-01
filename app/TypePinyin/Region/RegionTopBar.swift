@@ -9,7 +9,7 @@ struct RegionTopBar: View {
 
     var body: some View {
         let rank = j.rank(of: region.volume)
-        let progress = j.learner.rankProgress(of: region.volume, rank: rank, content: j.content)
+        let progress = j.cardProgress(of: region.volume)
         HStack(spacing: 10) {
             Button { j.screen = .map } label: {
                 Text("回江湖").font(.system(size: 15, weight: .black)).foregroundStyle(Palette.ink)

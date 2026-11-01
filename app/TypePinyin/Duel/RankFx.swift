@@ -1,12 +1,12 @@
 import LearningCore
 import SwiftUI
 
-/// 秘籍重数的爆字母效果（试看版）：主题跟着卷走（每卷一种粒子和一种飞法，取自这片地区的景色），档次跟着重数走。
+/// 秘籍重数的爆字母效果：主题跟着书走（一本书一种粒子和一种飞法，上下卷是一家），档次跟着重数走。
 /// - 零重：默认彩纸；
-/// - 一重：换成这一卷的主题粒子，6 片；二重 12 片；三重 20 片（最多）；
+/// - 一重：换成这一卷的主题粒子，9 片；二重 16 片；三重 24 片；四重 30 片；五重 36 片；
 /// - 四重：再往上冲；五重：冲得更猛、横向散得更开。
 /// 只有粒子跟着卷换，字母颜色统一（每个字一种颜色，同一张牌上会乱）。
-/// 现在切片里还没有真的重数，用调参面板的「试看重数」把所有字母设成同一重。
+/// 每个字母按它的音节属于哪一卷、那一卷练到第几重来爆（没拿到的卷 = 零重）；调参面板的「试看重数」把所有字母设成同一重。
 enum RankFx {
     enum Kind { case confetti, plum, drop, tea, kite, moon, willow, spring, peach }
 
@@ -19,29 +19,28 @@ enum RankFx {
 
     static let order = ["base", "liangzi-shang", "liangzi-xia", "biyin-shang", "biyin-xia", "yw", "shengzi", "lv", "sanpin-shang", "sanpin-xia"]
 
+    /// 一本书一种粒子，上下卷是一家（2026-11-01 定，去掉了月牙和柳叶）。
+    static let plum = Theme(name: "白梅", kind: .plum, colors: [.white, Color(hex: 0xFFE3EA), .white], accent: Color(hex: 0xF08AA8))
+    static let kite = Theme(name: "纸鸢", kind: .kite, colors: [Palette.red, Palette.gold, Color(hex: 0x3FBF8F)], accent: Palette.red)
+    static let peach = Theme(name: "桃花", kind: .peach,
+                             colors: [Color(hex: 0xFF9CC0), Color(hex: 0xFFC4D8), Color(hex: 0xFF7AA8)], accent: Color(hex: 0xFF5C93))
     static let themes: [String: Theme] = [
-        "base": Theme(name: "葫芦集 · 彩纸", kind: .confetti, colors: Confetti.paper, accent: Palette.gold),
-        "liangzi-shang": Theme(name: "白梅台 · 白梅", kind: .plum,
-                               colors: [.white, Color(hex: 0xFFE3EA), .white], accent: Color(hex: 0xF08AA8)),
-        "liangzi-xia": Theme(name: "潮头岛 · 浪花", kind: .drop,
-                             colors: [Color(hex: 0x8FD3FF), .white, Color(hex: 0x4FA3E8)], accent: Color(hex: 0x3B8BD9)),
-        "biyin-shang": Theme(name: "半山镇 · 茶叶", kind: .tea,
-                             colors: [Color(hex: 0x5BAA4A), Color(hex: 0x8CC63F), Color(hex: 0x3E7D32)], accent: Color(hex: 0x3E7D32)),
-        "biyin-xia": Theme(name: "长风城 · 纸鸢", kind: .kite,
-                           colors: [Palette.red, Palette.gold, Color(hex: 0x3FBF8F)], accent: Palette.red),
-        "yw": Theme(name: "月牙湾 · 月牙", kind: .moon,
-                    colors: [Color(hex: 0xF5C542), Color(hex: 0xFFE07A), Color(hex: 0xE8A317)], accent: Palette.gold),
-        "shengzi": Theme(name: "垂柳村 · 柳叶", kind: .willow,
-                         colors: [Color(hex: 0xA8D86E), Color(hex: 0x7DBB4A), Color(hex: 0xC9E89A)], accent: Color(hex: 0x5E9E34)),
-        "lv": Theme(name: "绿泉居 · 泉水", kind: .spring,
+        "base": Theme(name: "彩纸", kind: .confetti, colors: Confetti.paper, accent: Palette.gold),
+        "liangzi-shang": plum, "liangzi-xia": plum,
+        "biyin-shang": kite, "biyin-xia": kite,
+        "yw": Theme(name: "浪花", kind: .drop,
+                    colors: [Color(hex: 0x8FD3FF), .white, Color(hex: 0x4FA3E8)], accent: Color(hex: 0x3B8BD9)),
+        "shengzi": Theme(name: "茶叶", kind: .tea,
+                         colors: [Color(hex: 0x5BAA4A), Color(hex: 0x8CC63F), Color(hex: 0x3E7D32)], accent: Color(hex: 0x3E7D32)),
+        "lv": Theme(name: "泉水", kind: .spring,
                     colors: [Color(hex: 0x3FBF8F), Color(hex: 0x8FE3C8), Color(hex: 0x2A9D8F)], accent: Color(hex: 0x2A9D8F)),
-        "sanpin-shang": Theme(name: "小桥乡 · 桃花", kind: .peach,
-                              colors: [Color(hex: 0xFF9CC0), Color(hex: 0xFFC4D8), Color(hex: 0xFF7AA8)], accent: Color(hex: 0xFF5C93)),
-        "sanpin-xia": Theme(name: "黄花关 · 桃花", kind: .peach,
-                            colors: [Color(hex: 0xFF9CC0), Color(hex: 0xFFC4D8), Color(hex: 0xFF7AA8)], accent: Color(hex: 0xFF5C93)),
+        "sanpin-shang": peach, "sanpin-xia": peach,
     ]
 
     static func theme(_ volume: String) -> Theme { themes[volume] ?? themes["base"]! }
+
+    /// 调参面板里列主题用：「两字诀·上 · 白梅」。
+    static func themeLabel(_ volume: String) -> String { Volumes.name(volume) + " · " + theme(volume).name }
 
     /// 一个音节属于哪一卷（任何音节都能归，规则在 LearningCore）。
     @MainActor static func volume(of s: String) -> String { AppResources.content.volume(of: s) }
@@ -159,11 +158,11 @@ enum RankFx {
     /// 每一重迸几片、往上冲多猛、横向散多开：一重少，三重最多，四重起往上冲，五重冲得更猛。
     static func level(_ rank: Int) -> (count: Int, lift: Double, speed: Double) {
         switch rank {
-        case ...1: return (6, 0, 1)
-        case 2: return (12, 0, 1)
-        case 3: return (20, 0, 1)
-        case 4: return (20, 230, 1.3)
-        default: return (28, 420, 1.7)
+        case ...1: return (9, 0, 1)
+        case 2: return (16, 0, 1)
+        case 3: return (24, 0, 1)
+        case 4: return (30, 230, 1.3)
+        default: return (36, 420, 1.7)
         }
     }
 
@@ -193,7 +192,13 @@ enum RankFx {
 /// 打字时的词牌要不要用主题粒子（试看重数一重及以上时打开），由 CardsView 往下传。
 private struct RankFxOnKey: EnvironmentKey { static let defaultValue = false }
 private struct RankFxThemeKey: EnvironmentKey { static let defaultValue = "" }
+private struct VolumeRanksKey: EnvironmentKey { static let defaultValue: [String: Int] = [:] }
 extension EnvironmentValues {
+    /// 玩家每一卷练到第几重（没拿到的不在里面）。
+    var volumeRanks: [String: Int] {
+        get { self[VolumeRanksKey.self] }
+        set { self[VolumeRanksKey.self] = newValue }
+    }
     var rankFxOn: Bool {
         get { self[RankFxOnKey.self] }
         set { self[RankFxOnKey.self] = newValue }

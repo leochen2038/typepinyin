@@ -62,8 +62,12 @@ struct TuningPanelView: View {
         D(label: "打对率目标", kp: \.learning.successTarget, step: 0.05, range: 0.5...1),
         D(label: "手速滑动权重", kp: \.learning.speedWeight, step: 0.05, range: 0.05...1),
         D(label: "初入江湖每场目标（秒）", kp: \.learning.openingTargetSeconds, step: 5, range: 15...120),
+        D(label: "地区里出没收过的词卡的比例", kp: \.learning.newCardShare, step: 0.1, range: 0...1),
+        D(label: "新音节第一次又快又对算本来就会（秒/字母）", kp: \.learning.knownSecondsPerLetter, step: 0.1, range: 0.2...2),
     ]
     private let learnI: [I] = [
+        I(label: "词卡熟练：累计几场打对", kp: \.learning.fluentDuels, range: 1...6),
+        I(label: "词卡精通：累计几场打对", kp: \.learning.masterDuels, range: 2...10),
         I(label: "熟练要几个不同的日子", kp: \.learning.fluentDays, range: 1...5),
         I(label: "熟练看最近几次", kp: \.learning.fluentRecent, range: 1...10),
         I(label: "精通看最近几次", kp: \.learning.masterRecent, range: 1...10),
@@ -72,10 +76,7 @@ struct TuningPanelView: View {
         I(label: "每天最多新学几个", kp: \.learning.newPerDay, range: 0...30),
         I(label: "刚错过后几张出会的", kp: \.learning.afterMissKnown, range: 0...5),
         I(label: "最近几个词不重复", kp: \.learning.recentWords, range: 0...40),
-        I(label: "摸底探几族", kp: \.learning.probeFamilies, range: 0...6),
-        I(label: "摸底每族探几个", kp: \.learning.probePerFamily, range: 1...8),
         I(label: "初入江湖几场", kp: \.learning.openingBattles, range: 1...5),
-        I(label: "初入江湖每场探几个（0 = 只用第一卷的音节）", kp: \.learning.openingProbesPerDuel, range: 0...3),
     ]
     private let ints: [I] = [
         I(label: "被来招打中掉血", kp: \.incomingDamage, range: 0...50),
@@ -159,13 +160,23 @@ struct TuningPanelView: View {
                     .pickerStyle(.menu)
                     Picker("主题", selection: $t.rankFxTheme) {
                         Text("按字所属的卷").tag("")
-                        ForEach(RankFx.order, id: \.self) { Text(RankFx.theme($0).name).tag($0) }
+                        ForEach(RankFx.order, id: \.self) { v in Text(RankFx.themeLabel(v)).tag(v) }
                     }
                     .pickerStyle(.menu)
                 } header: {
                     Text("秘籍重数的爆字母（试看）")
                 } footer: {
                     Text("一重换成这一卷的主题粒子，迸得少；二重多一些；三重最多；四重再往上冲；五重冲得更猛、散得更开。打字时打完一个字也迸主题粒子。")
+                }
+                Section {
+                    Picker("出招前预备", selection: $t.anticipation) {
+                        Text("不做").tag(0.0)
+                        ForEach([0.1, 0.14, 0.2, 0.3, 0.75], id: \.self) { s in Text("\(s.formatted()) 秒").tag(s) }
+                    }
+                } header: {
+                    Text("出招动作（下一场生效）")
+                } footer: {
+                    Text("出招前先往后退、压扁、后仰攒劲，再冲出去拉长、到位一抖。0.75 秒是原版速度，越短越利落。")
                 }
                 Section("声音") {
                     Toggle("音乐", isOn: Binding(get: { c.music.on }, set: { c.music.on = $0 }))
@@ -175,18 +186,22 @@ struct TuningPanelView: View {
                     Picker("攒气倍数", selection: $t.qiMultiplier) {
                         ForEach([1.0, 2, 3, 5, 10, 20], id: \.self) { m in Text("\(Int(m)) 倍").tag(m) }
                     }
+                    Picker("必杀定格", selection: $t.finisherFreeze) {
+                        Text("不定格").tag(0.0)
+                        ForEach([0.5, 0.8, 1.0, 1.4], id: \.self) { s in Text("\(s.formatted()) 秒").tag(s) }
+                    }
                 } header: {
-                    Text("必杀（测试用，下一场生效）")
+                    Text("必杀（下一场生效）")
                 } footer: {
-                    Text("气攒得快，必杀来得勤，用来看气满、光点飞到牌上、必杀演出和群战打全场。5 倍大约两张牌气满，20 倍一张牌就满。平时放 1 倍。")
+                    Text("气攒得快，必杀来得勤，用来看气满、光点飞到牌上、必杀演出和群战打全场。5 倍大约两张牌气满，20 倍一张牌就满。平时放 1 倍。定格：最后一刀落下时画面慢到几乎停住、镜头推近、上下黑边、盖上成语，计时也停（原版 1.4 秒）。")
                 }
                 Section {
                     Toggle("群战", isOn: $t.groupFight)
                     Stepper("场上最多几个人：\(t.groupSize)", value: $t.groupSize, in: 1...3)
                     Stepper("一共几个人：\(t.groupTotal)", value: $t.groupTotal, in: 2...9)
                     Picker("必杀怎么打全场", selection: $t.groupFinisherStyle) {
+                        Text("连斩（定了）").tag(1)
                         Text("横扫剑气").tag(0)
-                        Text("连斩").tag(1)
                         Text("旋身").tag(2)
                     }
                 } header: {
@@ -210,7 +225,7 @@ struct TuningPanelView: View {
                 } header: {
                     Text("命数（试玩，下一场生效）")
                 } footer: {
-                    Text("打空一条血，对手跪地一下再站起来，血条换个颜色满上；血条下面一块一块的是还剩的命。整场的血平分到每条命上。群战里不用命数。掌门蓄力打不断：打完一张牌不重来，只往回推一截（0 = 完全推不动），必杀才打断；演回顾、跪地时停住。")
+                    Text("打空一条血，对手跪地一下再站起来，血条换个颜色满上；血条下面一块一块的是还剩的命。每条命都和单挑的对手一样厚，几条命就打几倍长。群战里不用命数。掌门蓄力打不断：打完一张牌不重来，只往回推一截（0 = 完全推不动），必杀才打断；演回顾、跪地时停住。")
                 }
                 Section("旧玩法") {
                     Toggle("玩家气条（攒满出成语必杀牌）", isOn: $t.qiBar)

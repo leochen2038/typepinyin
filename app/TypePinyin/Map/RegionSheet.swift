@@ -1,11 +1,15 @@
 import LearningCore
+import ProgressStore
 import SwiftUI
 
-/// 点开地区：底部弹出的简介卡。
+/// 点开地区：底部弹出的简介卡。状态写未挑战 / 挑战中 / 已挑战；词卡写这里一共几张、已集几张。
 struct RegionSheet: View {
     let region: Region
-    let state: PlaceState
+    let phase: RegionPhase
     let stationLine: String?
+    /// 这一卷收了几张词卡、含这一卷音节的词一共几张。
+    var cards = 0
+    var total = 0
     let onGo: () -> Void
     let onClose: () -> Void
 
@@ -23,7 +27,8 @@ struct RegionSheet: View {
             Text(region.scene).font(.system(size: 15)).foregroundStyle(Palette.ink)
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Text(region.hint).font(Fonts.display(24)).foregroundStyle(Palette.red)
-                Text(region.difficulty).font(.system(size: 14, weight: .semibold)).foregroundStyle(Palette.slate)
+                Text(phase == .untouched ? "这里有 \(total) 张词卡" : "已集 \(cards) / \(total) 张词卡")
+                    .font(.system(size: 14, weight: .semibold)).foregroundStyle(Palette.slate)
             }
             HStack(spacing: 8) {
                 ForEach(region.examples, id: \.char) { e in
@@ -51,29 +56,16 @@ struct RegionSheet: View {
         .padding(.horizontal, 12).padding(.bottom, 16)
     }
 
-    var stateText: String {
-        switch state {
-        case .untouched: "还没去过"
-        case .inProgress: "挑战中"
-        case .cleared(let r): "第\(["", "一", "二", "三", "四", "五"][max(1, min(5, r))])重"
-        default: ""
-        }
-    }
+    var stateText: String { ["未挑战", "挑战中", "已挑战"][phase == .untouched ? 0 : phase == .inProgress ? 1 : 2] }
 
-    var stateColor: Color {
-        switch state {
-        case .inProgress: Palette.green
-        case .cleared: Palette.red
-        default: Palette.slate
-        }
-    }
+    var stateColor: Color { phase == .inProgress ? Palette.green : phase == .cleared ? Palette.red : Palette.slate }
 
     var buttonText: String {
         guard region.playable else { return "还在修路" }
-        switch state {
+        switch phase {
         case .inProgress: return "接着走"
         case .cleared: return "再去一趟"
-        default: return "出发"
+        case .untouched: return "出发"
         }
     }
 }

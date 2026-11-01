@@ -16,7 +16,7 @@ import LearningCore
         }
         func nextIdiom() -> (word: Word, rank: Int)? { nil }
         func cardDone(_ word: Word, clean: Bool) { done.append((word.text, clean)) }
-        func newMove(_ spelling: String) { newMoves.append(spelling) }
+        func newMove(_ spelling: String, in word: Word) { newMoves.append(spelling) }
     }
 
     func engine(_ source: FixedSource, setup: DuelSetup = DuelSetup()) -> DuelEngine {

@@ -49,7 +49,8 @@ import Testing
         #expect(active[0].isFinisher && active[0].word.isIdiom)
         // 被暂停的牌按首字母也锁不上
         if let idle = e.cards.first(where: \.inactive), idle.word.firstLetter != active[0].word.firstLetter {
-            #expect(clock.type(e, String(idle.word.firstLetter)) == [.letterRejected(idle.word.firstLetter)])
+            #expect(clock.type(e, String(idle.word.firstLetter)).first == .letterRejected(idle.word.firstLetter))
+            #expect(e.target == .none)
         }
     }
 

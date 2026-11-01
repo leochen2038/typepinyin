@@ -1,25 +1,23 @@
 import Testing
 @testable import LearningCore
 
-/// 初入江湖的出字：已会的高频字为主，每场 2–3 个摸底音节且不连着出；刚错过出会的；打对率低时少出新的。
+/// 没指定地区、也没有词池时的出字：只出已会的高频字；刚错过出会的。
 @Suite struct OpeningDealTests {
     let c = TestContent.shared
 
     func dealer(seed: UInt64 = 1) -> Dealer {
-        Dealer(content: c, learner: Learner(), probe: ProbeState(), context: DealContext(volume: nil, today: 1), seed: seed)
+        Dealer(content: c, learner: Learner(), context: DealContext(volume: nil, today: 1), seed: seed)
     }
 
-    @Test func mostlyEasyWithAFewSpacedProbes() {
+    /// 摸底去掉了：没指定地区也没有词池时，只出全是会的音节的词，不带新音节。
+    @Test func onlyEasyWords() {
         for seed in 1...5 as ClosedRange<UInt64> {
             let d = dealer(seed: seed)
-            var news: [Int] = []
-            for k in 0..<12 {
+            for _ in 0..<12 {
                 let w = d.next()
-                if w.newSyllables.count > 0 { news.append(k) }
+                #expect(w.newSyllables.isEmpty)
                 d.note(w.word, clean: true)
             }
-            #expect((2...3).contains(news.count), "seed \(seed): \(news)")
-            for (a, b) in zip(news, news.dropFirst()) { #expect(b - a > LearningTuning().newGap) }
         }
     }
 

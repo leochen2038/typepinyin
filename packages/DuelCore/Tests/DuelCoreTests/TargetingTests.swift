@@ -18,13 +18,30 @@ import Testing
         #expect(e.cards[1].word.text != "装修")
     }
 
-    @Test func rejectedLetterDoesNotChangeState() {
+    @Test func rejectedFirstLetterCostsHPButLocksNothing() {
         let e = Fixture.engine(features: [])
         let clock = FakeClock()
+        let hp = e.player.hp
         let ev = clock.type(e, "q")
-        #expect(ev == [.letterRejected("q")])
+        #expect(ev.first == .letterRejected("q"))
+        #expect(ev.contains(.mistake("", damage: e.tuning.mistakeDamage)))
+        #expect(e.player.hp == hp - e.tuning.mistakeDamage)
         #expect(e.target == .none)
         #expect(e.cards.allSatisfy { $0.typed.isEmpty })
+    }
+
+    @Test func missedSyllableIsSmoothedByALaterCleanCard() {
+        let e = Fixture.engine(features: [])
+        let clock = FakeClock()
+        clock.type(e, "zhuangx")
+        clock.type(e, "q")                                     // xiu 拼错
+        #expect(e.missed == [MissedSyllable(spelling: "xiu", word: "装修")])
+        clock.type(e, "iu")                                    // 这张有错，打完不算打顺
+        #expect(e.missed.first?.smoothed == false)
+        e.cards[1] = MoveCard(id: 200, word: Fixture.word("装修"), dealtAt: 0, rank: 0)
+        clock.now += 1
+        clock.type(e, "zhuangxiu")                             // 再来一张一次打对
+        #expect(e.missed.first?.smoothed == true)
     }
 
     @Test func wrongLetterOnLockedCardIsNotEntered() {

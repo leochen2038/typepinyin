@@ -26,8 +26,7 @@ import Testing
         let familiar = [("地图", ["di", "tu"]), ("大地", ["da", "di"]), ("可以", ["ke", "yi"]), ("他的", ["ta", "de"]),
                         ("哥哥", ["ge", "ge"]), ("西瓜", ["xi", "gua"])].map { word($0.0, $0.1, clean: Array(repeating: true, count: 5), spl: 0.3) }
         let words = [shaky] + familiar
-        let dealer = Dealer(content: c, learner: Learner(tuning: LearningTuning()), probe: ProbeState(),
-                            context: DealContext(volume: nil, today: 0, probeLimit: 0, pool: words.map(\.asContentWord),
+        let dealer = Dealer(content: c, learner: Learner(tuning: LearningTuning()), context: DealContext(volume: nil, today: 0, pool: words.map(\.asContentWord),
                                                  weights: PracticeWeights.weights(words, typical: 0.4)),
                             seed: 7)
         var count: [String: Int] = [:]

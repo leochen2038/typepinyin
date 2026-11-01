@@ -16,8 +16,7 @@ import Testing
     }
 
     func lengths(_ weights: [Int: Double], volume: String?, learner: Learner) -> [Int] {
-        let d = Dealer(content: c, learner: learner, probe: ProbeState(),
-                       context: DealContext(volume: volume, today: 1, lengths: weights), seed: 7)
+        let d = Dealer(content: c, learner: learner, context: DealContext(volume: volume, today: 1, lengths: weights), seed: 7)
         var out: [Int] = []
         for _ in 0..<40 { let w = d.next(); out.append(w.word.text.count); d.note(w.word, clean: true) }
         return out

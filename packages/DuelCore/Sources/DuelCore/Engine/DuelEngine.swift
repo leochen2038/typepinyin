@@ -51,8 +51,12 @@ public final class DuelEngine {
 
     // 收获统计
     var charactersTyped = 0
+    /// 打字速度用：打完的牌从露出来到打完一共多少秒、多少个字（不算出招、回顾这些动画的时间）。
+    var typingSeconds = 0.0
+    var typingChars = 0
     var parries = 0
     var newMoves: [String] = []
+    var missed: [MissedSyllable] = []
 
     // 按招数计的一场
     public internal(set) var moveMarks: [Bool] = []
@@ -77,6 +81,8 @@ public final class DuelEngine {
     var nextFoeId = 1
     /// 单挑时的对手血量，群战里各等级的血量按它乘系数。
     var unitHP = 1
+    /// 群战一共排了几个人（算出场顺序用）。
+    var groupLineupCount = 0
     /// 命数：对手丢了一条命正跪着，到这个时刻才站起来（之前不蓄力）。
     var foeDownUntil: Double = 0
     /// 最近一次出招打中了谁、打倒了谁、补上来了谁（界面按这个演）。
@@ -185,7 +191,7 @@ public final class DuelEngine {
     @discardableResult
     public func resume(at now: Double) -> [DuelEvent] {
         events = []
-        if case .paused(.background) = phase {
+        if case .paused = phase {
             endPause(at: now)
             phase = .fighting
             emit(.resumed)
@@ -299,7 +305,8 @@ public final class DuelEngine {
         opponent.incoming = nil
         summary = DuelSummary(charactersTyped: charactersTyped, maxCombo: player.maxCombo, parries: parries,
                               newMoves: newMoves, durationSeconds: clock, won: won,
-                              movesDone: moveMarks.count, goldMoves: moveMarks.filter { $0 }.count)
+                              movesDone: moveMarks.count, goldMoves: moveMarks.filter { $0 }.count, missed: missed,
+                              charsPerMinute: typingSeconds >= 1 ? Double(typingChars) / typingSeconds * 60 : 0)
         emit(won ? .won : .lost)
     }
 

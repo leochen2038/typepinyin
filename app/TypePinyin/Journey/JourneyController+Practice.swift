@@ -15,7 +15,8 @@ extension JourneyController {
         practiceRegion = region.id
         let foe = region.foes.randomElement() ?? region.boss
         let forceGroup = ProcessInfo.processInfo.arguments.contains("-practiceGroup")   // 开发用：固定 5 人群战
-        switch forceGroup ? 1 : Int.random(in: 0..<3) {
+        let forceDuel = ProcessInfo.processInfo.arguments.contains("-practiceDuel")     // 开发用：固定单挑
+        switch forceGroup ? 1 : forceDuel ? 0 : Int.random(in: 0..<3) {
         case 0:
             practiceStation = Station(kind: .duel, foe: foe, encounterId: nil, line: "\(foe.name)来练功房，抱拳道：「请指教。」")
         case 1:
@@ -42,7 +43,7 @@ extension JourneyController {
         let typical = progress.speed?.secondsPerLetter ?? 0.45
         let boss = st.kind == .boss
         planDuel(volume: nil, foe: foe, lives: boss ? 3 : 1, boss: boss, backdrop: (practiceRegion, Int.random(in: 0..<5)),
-                 probeLimit: 0, group: st.kind == .group, groupTotal: st.groupSize,
+                 group: st.kind == .group, groupTotal: st.groupSize,
                  pool: words.map(\.asContentWord), weights: PracticeWeights.weights(words, typical: typical)) { [weak self] summary, change in
             guard let self else { return }
             self.checkRankUps()

@@ -11,8 +11,8 @@ struct CardsView: View {
         HStack(spacing: 10) {
             ForEach(Array(c.cards.enumerated()), id: \.element.id) { i, card in
                 let covered = c.coveredSlots.contains(i)
-                CardView(card: card, big: big)
-                    .modifier(FinisherCardFX(on: card.finisher, arrival: c.finisherArrival))
+                CardView(card: card, big: big, sealed: card.finisher && c.finisherSealed)
+                    .modifier(FinisherCardFX(on: card.finisher, locked: card.locked, arrival: c.finisherArrival))
                     .opacity(covered ? 0 : 1)
                     .scaleEffect(covered ? 0.8 : 1)
                     .animation(.spring(duration: 0.25, bounce: 0.45), value: covered)
@@ -28,6 +28,7 @@ struct CardsView: View {
         .animation(.spring(duration: 0.32, bounce: 0.35), value: c.cards.map(\.id))
         .environment(\.rankFxOn, c.tuning.rankFx >= 1)
         .environment(\.rankFxTheme, c.tuning.rankFxTheme)      // 试看重数时，打完一个字也迸这一卷的主题粒子
+        .environment(\.volumeRanks, c.volumeRanks)
         .padding(.horizontal, big ? 48 : 16)
         .padding(.top, 8)
         .frame(height: big ? 128 : 104)
@@ -106,6 +107,14 @@ struct CharColumn: View {
     @State private var burst: Int = 0
     @Environment(\.rankFxOn) private var rankFxOn
     @Environment(\.rankFxTheme) private var rankFxTheme
+    @Environment(\.volumeRanks) private var volumeRanks
+
+    /// 打完这个字迸什么：这一卷练到一重及以上迸这一卷的主题粒子，没拿到迸默认彩纸；试看重数时按试看的来。
+    private var burstVolume: String? {
+        let v = RankFx.volume(of: syllable)
+        if rankFxOn { return rankFxTheme.isEmpty ? v : rankFxTheme }
+        return (volumeRanks[v] ?? 0) >= 1 ? v : nil
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -122,7 +131,7 @@ struct CharColumn: View {
                 .fixedSize()
         }
         .scaleEffect(pop ? 1.35 : 1)
-        .overlay(Burst(trigger: burst, volume: !rankFxOn ? nil : !rankFxTheme.isEmpty ? rankFxTheme : RankFx.volume(of: syllable)))      // 盖在字上面，不然字把纸屑最密的中间挡掉
+        .overlay(Burst(trigger: burst, volume: burstVolume))      // 盖在字上面，不然字把纸屑最密的中间挡掉
         .onChange(of: done) { _, now in
             guard now else { return }
             burst += 1
@@ -243,6 +252,8 @@ enum Confetti {
 struct CardView: View {
     let card: DuelController.CardVM
     var big = false
+    /// 必杀牌：气送到了，左上角盖一方朱红「必杀」印，边框开始呼吸。
+    var sealed = false
 
     var body: some View {
         let glow = min(1, (card.store - 1))
@@ -259,9 +270,11 @@ struct CardView: View {
             .padding(.horizontal, 4)
             .padding(.top, 8)
             HStack(spacing: 3) {
-                Text(card.finisher ? "必杀" : card.weight)
-                    .font(.system(size: 10, weight: .black))
-                    .foregroundStyle(card.finisher ? Palette.red : Palette.slate2)
+                if !card.finisher {
+                    Text(card.weight)
+                        .font(.system(size: 10, weight: .black))
+                        .foregroundStyle(Palette.slate2)
+                }
                 if card.store >= 1.1 && !card.finisher {
                     Text("×\(String(format: "%.1f", card.store))").font(.system(size: 10, weight: .black)).foregroundStyle(Palette.red)
                 }
@@ -281,6 +294,19 @@ struct CardView: View {
             Rectangle().strokeBorder(card.flaw && !card.finisher ? Palette.red : Palette.ink,
                                      style: StrokeStyle(lineWidth: 3, dash: card.flaw && !card.finisher ? [6, 4] : []))
         )
+        .overlay { if card.finisher && sealed { FinisherEdge() } }   // 必杀牌：边框在墨色和朱红之间呼吸（画在边框原位，跟着牌浮起、放大）
+        .overlay(alignment: .topLeading) {
+            if card.finisher && sealed {                       // 气落到牌上：一方朱红印从大到小砸下来
+                Text("必杀").font(.system(size: big ? 14 : 12, weight: .black)).foregroundStyle(.white)
+                    .padding(.horizontal, 4).padding(.vertical, 2)
+                    .background(Palette.red)
+                    .overlay(Rectangle().stroke(Color.white.opacity(0.8), lineWidth: 1).padding(2))
+                    .rotationEffect(.degrees(-8))
+                    .offset(x: -6, y: -8)
+                    .transition(.scale(scale: 2.6).combined(with: .opacity))
+            }
+        }
+        .animation(.spring(duration: 0.22, bounce: 0.35), value: sealed)
         .background(Rectangle().fill(Palette.ink).offset(x: card.locked ? 5 : 3, y: card.locked ? 5 : 3))   // 实心投影：比 shadow 省，动画时不用离屏重画
         .offset(x: card.locked ? -2 : 0, y: card.locked ? -4 : 0)
         .animation(.easeOut(duration: 0.12), value: card.locked)
@@ -308,6 +334,7 @@ struct ReviewLayer: View {
     var big = true
     var rank = -1
     var theme = ""
+    var volumeRanks: [String: Int] = [:]
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -315,7 +342,7 @@ struct ReviewLayer: View {
                 if let f = cardFrames[r.slot] {
                     ZStack {
                         // 回顾牌一开始就放着（翻到背面看不见）：它的字母图在定格这 0.35 秒里先画好，翻牌那一帧就不会顿
-                        ReviewCard(review: r, card: f.size, rank: rank, theme: theme)
+                        ReviewCard(review: r, card: f.size, rank: rank, theme: theme, volumeRanks: volumeRanks)
                             .modifier(FlipX(angle: r.phase == 0 ? -90 : 0))
                         if r.phase == 0 {
                             // 定格：原样的词牌，最后一个字变红弹一下、整张放大；必杀时还要蓄力（发抖、聚气、高光扫过）
@@ -407,16 +434,19 @@ struct FlipX: ViewModifier {
 struct ReviewCard: View {
     let review: DuelController.Review
     let card: CGSize
-    /// 试看秘籍重数的爆字母效果：-1 = 关（默认彩纸），0–5 = 所有字母按这一重来爆；theme 非空时所有字母都用这一卷的主题。
+    /// 试看秘籍重数的爆字母效果：-1 = 不试看（每个字母按自己那一卷的重数），0–5 = 所有字母按这一重来爆；theme 非空时所有字母都用这一卷的主题。
     var rank = -1
     var theme = ""
+    /// 玩家每一卷练到第几重（没拿到的不在里面 = 零重，爆默认彩纸）。
+    var volumeRanks: [String: Int] = [:]
     /// 画布比牌大一圈，冲击波、纸屑、金字印能画到牌外面；四重起粒子往上冲得远，画布再放大。
-    private var pad: CGFloat { rank >= 4 ? 360 : 90 }
+    private func pad(_ L: Layout) -> CGFloat { (L.ranks.max() ?? 0) >= 4 ? 360 : 90 }
 
     private struct Layout {
         var size: CGFloat = 30
         var letters: [(ch: Character, p: CGPoint)] = []
         var volumes: [String] = []          // 每个字母所在音节属于哪一卷
+        var ranks: [Int] = []               // 每个字母按第几重来爆
         var chars: [(ch: Character, p: CGPoint)] = []
         var charSize: CGFloat = 16
     }
@@ -433,14 +463,14 @@ struct ReviewCard: View {
                 ForEach(symbolIDs(L), id: \.self) { id in symbol(id, L).tag(id) }
             }
         }
-        .frame(width: card.width + pad * 2, height: card.height + pad * 2)
+        .frame(width: card.width + pad(L) * 2, height: card.height + pad(L) * 2)
     }
 
     private func symbolIDs(_ L: Layout) -> [Int] {
         L.letters.indices.map { Tag.letterInk + $0 } + L.letters.indices.map { Tag.letterRed + $0 }
             + L.chars.indices.map { Tag.char + $0 }
             + Confetti.symbolIDs(base: Tag.confetti) + [Tag.seal]
-            + (rank >= 1 ? RankFx.symbolIDs(volumes: Set(L.volumes), base: Tag.themed) : [])
+            + RankFx.symbolIDs(volumes: Set(L.volumes.indices.filter { L.ranks[$0] >= 1 }.map { L.volumes[$0] }), base: Tag.themed)
 
     }
 
@@ -490,6 +520,7 @@ struct ReviewCard: View {
             for ch in syl {
                 L.letters.append((ch, CGPoint(x: lx + letterW / 2, y: top + charH + letterH / 2)))
                 L.volumes.append(vol)
+                L.ranks.append(rank >= 0 ? rank : volumeRanks[vol] ?? 0)
                 lx += letterW
             }
             x += w + gap
@@ -510,7 +541,8 @@ struct ReviewCard: View {
         let dn = now - lastPop
         let nudge: CGFloat = dn < 0.03 ? 5 * dn / 0.03 : dn < 0.15 ? 5 * (1 - (dn - 0.03) / 0.12) : 0
         var g = ctx
-        g.translateBy(x: pad + card.width / 2, y: pad + card.height / 2 + nudge)
+        let inset = pad(L)
+        g.translateBy(x: inset + card.width / 2, y: inset + card.height / 2 + nudge)
         g.scaleBy(x: scale, y: scale)
         g.translateBy(x: -card.width / 2, y: -card.height / 2)
         let rect = CGRect(origin: .zero, size: card)
@@ -554,8 +586,8 @@ struct ReviewCard: View {
         for i in L.letters.indices where i < popAt.count {
             let dt = now - popAt[i]
             guard dt >= 0 && dt < 1.5 else { continue }        // 花瓣、柳叶飘得久，留够时间
-            if rank >= 1 {
-                RankFx.draw(g, at: L.letters[i].p, seed: i, t: dt, volume: L.volumes[i], rank: rank, base: Tag.themed)
+            if L.ranks[i] >= 1 {
+                RankFx.draw(g, at: L.letters[i].p, seed: i, t: dt, volume: L.volumes[i], rank: L.ranks[i], base: Tag.themed)
             } else {
                 Confetti.draw(g, at: L.letters[i].p, seed: i, t: dt, base: Tag.confetti)
             }
@@ -595,35 +627,49 @@ struct StarShape: Shape {
 /// 必杀牌：气条飞来的光点落下时，牌白光一闪、弹一下；之后里面一圈白边一亮一暗，跟气条一起呼吸，直到打出去。
 struct FinisherCardFX: ViewModifier {
     let on: Bool
+    /// 锁定时牌往左上浮（CardView 里的 offset），白闪要跟着一起动。
+    let locked: Bool
     let arrival: Int
     @State private var flash = 0.0
     @State private var pop: CGFloat = 1
-    @State private var breathe = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
         content
             .overlay {
-                if on {
-                    Rectangle().strokeBorder(Color.white, lineWidth: 3).padding(4)
-                        .opacity(breathe ? 0.95 : 0.2)
-                        .allowsHitTesting(false)
-                }
+                Rectangle().fill(Color.white).opacity(flash)
+                    .offset(x: locked ? -2 : 0, y: locked ? -4 : 0)
+                    .allowsHitTesting(false)
             }
-            .overlay { Rectangle().fill(Color.white).opacity(flash).allowsHitTesting(false) }
             .scaleEffect(pop)
             .onChange(of: arrival) { _, _ in
                 guard on else { return }
+                // 参考 Motion Prompt #003 バースト：气团快到时牌先往里一缩（原版缩到 0.7，牌太大，这里 0.88），
+                // 落下那一下闪白、用弹簧 1 − e^(−6.5t)·cos(16t) 弹回原大
                 Task { @MainActor in
-                    try? await Task.sleep(for: .seconds(DuelController.qiFlight))
+                    try? await Task.sleep(for: .seconds(DuelController.qiArrive - 0.2))
+                    if !reduceMotion { withAnimation(.easeInOut(duration: 0.2)) { pop = 0.88 } }
+                    try? await Task.sleep(for: .seconds(0.2))
                     flash = 0.9
-                    pop = reduceMotion ? 1 : 1.12
                     withAnimation(.easeOut(duration: 0.4)) { flash = 0 }
-                    withAnimation(.spring(duration: 0.35, bounce: 0.55)) { pop = 1 }
-                    guard !reduceMotion else { breathe = true; return }
-                    withAnimation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true)) { breathe = true }
+                    withAnimation(.spring(duration: 0.5, bounce: 0.6)) { pop = 1 }
                 }
             }
-            .onChange(of: on) { _, now in if !now { breathe = false } }
+    }
+}
+
+/// 必杀牌的边框：盖在墨色边框原位（同样 3 点粗），在墨色和朱红之间呼吸。
+struct FinisherEdge: View {
+    @State private var breathe = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Rectangle().strokeBorder(Palette.red, lineWidth: 3)
+            .opacity(breathe ? 1 : 0)
+            .allowsHitTesting(false)
+            .onAppear {
+                guard !reduceMotion else { breathe = true; return }
+                withAnimation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true)) { breathe = true }
+            }
     }
 }

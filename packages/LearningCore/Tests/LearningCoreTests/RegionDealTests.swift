@@ -25,7 +25,7 @@ import Testing
         var count: [DealReason: Int] = [:]
         var total = 0
         for seed in 1...10 as ClosedRange<UInt64> {
-            let d = Dealer(content: c, learner: l, probe: ProbeState(), context: DealContext(volume: "biyin-shang", today: 5), seed: seed)
+            let d = Dealer(content: c, learner: l, context: DealContext(volume: "biyin-shang", today: 5), seed: seed)
             for _ in 0..<20 {
                 let w = d.next()
                 count[w.reason, default: 0] += 1
@@ -40,8 +40,7 @@ import Testing
     }
 
     @Test func newOnesAreCappedAndSpaced() {
-        let d = Dealer(content: c, learner: learnerKnowing(["base"]), probe: ProbeState(),
-                       context: DealContext(volume: "biyin-shang", today: 5), seed: 3)
+        let d = Dealer(content: c, learner: learnerKnowing(["base"]), context: DealContext(volume: "biyin-shang", today: 5), seed: 3)
         var news: [Int] = []
         var total = 0
         for k in 0..<20 {

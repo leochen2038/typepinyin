@@ -6,8 +6,7 @@ import Testing
     let c = TestContent.shared
 
     func newCount(newToday: Int) -> Int {
-        let d = Dealer(content: c, learner: Learner(), probe: ProbeState(),
-                       context: DealContext(volume: "biyin-shang", today: 3, newToday: newToday), seed: 4)
+        let d = Dealer(content: c, learner: Learner(), context: DealContext(volume: "biyin-shang", today: 3, newToday: newToday), seed: 4)
         var n = 0
         for _ in 0..<20 { let w = d.next(); n += w.newSyllables.count; d.note(w.word, clean: true) }
         return n
@@ -19,8 +18,7 @@ import Testing
     }
 
     @Test func dealerCountsWhatItIntroduced() {
-        let d = Dealer(content: c, learner: Learner(), probe: ProbeState(),
-                       context: DealContext(volume: "biyin-shang", today: 3, newToday: 0), seed: 4)
+        let d = Dealer(content: c, learner: Learner(), context: DealContext(volume: "biyin-shang", today: 3, newToday: 0), seed: 4)
         var n = 0
         for _ in 0..<20 { let w = d.next(); n += w.newSyllables.count; d.note(w.word, clean: true) }
         #expect(d.context.newToday == n)

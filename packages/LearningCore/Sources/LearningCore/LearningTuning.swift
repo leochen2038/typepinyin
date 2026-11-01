@@ -5,8 +5,8 @@ public struct LearningTuning: Codable, Sendable, Equatable {
     // 熟练度
     /// 第一次出现就打对、没看提示、上手不到这么多秒 → 直接熟练。
     public var firstFluentStart: Double = 1.0
-    /// 熟练：至少在这么多个不同的日子里打对……
-    public var fluentDays: Int = 2
+    /// 熟练：至少在这么多个不同的日子里打对……（1 = 不要求隔天，2026-10-31 试玩后去掉了隔天）
+    public var fluentDays: Int = 1
     /// ……并且最近这么多次都没错……
     public var fluentRecent: Int = 3
     /// ……上手都不到这么多秒。
@@ -40,20 +40,18 @@ public struct LearningTuning: Codable, Sendable, Equatable {
     /// 最近出过的多少个词不重复。
     public var recentWords: Int = 14
 
-    // 渐进摸底
-    public var probeFamilies: Int = 3
-    public var probePerFamily: Int = 4
-    /// 某族错这么多个以上记为重点，再探 probeFocusExtra 个。
-    public var probeFocusMisses: Int = 2
-    public var probeFocusExtra: Int = 3
+    // 词卡
+    /// 词卡熟练、精通：累计这么多场打对（一场里打这个词都没错、没看提示算一场）。
+    public var fluentDuels: Int = 2
+    public var masterDuels: Int = 4
+    /// 地区里挑词时，从没收过的词卡里挑的比例（其余出收过的）。
+    public var newCardShare: Double = 0.7
+    /// 新音节第一次碰到就打对、每个字母不超过这么多秒：算本来就会，不占新音节名额。
+    public var knownSecondsPerLetter: Double = 0.8
 
     // 手速
     /// 每场结束按这个权重滑动更新。
     public var speedWeight: Double = 0.2
-
-    // 第一关减负
-    /// 初入江湖每场最多探几个音节（第一场不探）。默认 0：初入江湖只用第一卷的 30 个音节。
-    public var openingProbesPerDuel: Int = 0
 
     // 招式牌几个字（依次是二、三、四、五字的比重）
     /// 地区里前两站。
@@ -82,8 +80,8 @@ public struct LearningTuning: Codable, Sendable, Equatable {
         case firstFluentStart, fluentDays, fluentRecent, fluentStart, masterRecent, masterStart
         case replayOffsets, reviewDays, mixKnown, mixNew, mixReview, mixFiller, newPerDuel, newGap, newPerDay
         case afterMissKnown, successTarget, successWindow, recentWords
-        case probeFamilies, probePerFamily, probeFocusMisses, probeFocusExtra, speedWeight
-        case openingBattles, openingTargetSeconds, openingMinHP, openingProbesPerDuel
+        case fluentDuels, masterDuels, newCardShare, knownSecondsPerLetter, speedWeight
+        case openingBattles, openingTargetSeconds, openingMinHP
         case earlyLengths, middleLengths, bossLengths
     }
 
@@ -111,15 +109,14 @@ public struct LearningTuning: Codable, Sendable, Equatable {
         successTarget = try v(.successTarget, d.successTarget)
         successWindow = try v(.successWindow, d.successWindow)
         recentWords = try v(.recentWords, d.recentWords)
-        probeFamilies = try v(.probeFamilies, d.probeFamilies)
-        probePerFamily = try v(.probePerFamily, d.probePerFamily)
-        probeFocusMisses = try v(.probeFocusMisses, d.probeFocusMisses)
-        probeFocusExtra = try v(.probeFocusExtra, d.probeFocusExtra)
+        fluentDuels = try v(.fluentDuels, d.fluentDuels)
+        masterDuels = try v(.masterDuels, d.masterDuels)
+        newCardShare = try v(.newCardShare, d.newCardShare)
+        knownSecondsPerLetter = try v(.knownSecondsPerLetter, d.knownSecondsPerLetter)
         speedWeight = try v(.speedWeight, d.speedWeight)
         openingBattles = try v(.openingBattles, d.openingBattles)
         openingTargetSeconds = try v(.openingTargetSeconds, d.openingTargetSeconds)
         openingMinHP = try v(.openingMinHP, d.openingMinHP)
-        openingProbesPerDuel = try v(.openingProbesPerDuel, d.openingProbesPerDuel)
         earlyLengths = try v(.earlyLengths, d.earlyLengths)
         middleLengths = try v(.middleLengths, d.middleLengths)
         bossLengths = try v(.bossLengths, d.bossLengths)

@@ -1,7 +1,7 @@
 import Testing
 @testable import LearningCore
 
-/// 熟练度：第一次又快又准直接熟练；熟练要隔天打对；看提示不算打对；只升不降。
+/// 熟练度：第一次又快又准直接熟练；熟练要连着打对、上手快（隔天可调，默认不要求）；看提示不算打对；只升不降。
 @Suite struct ProficiencyTests {
     func hit(_ s: String = "shan", day: Int, start: Double = 0.9, ok: Bool = true, hint: Bool = false, at: Double = 0) -> Attempt {
         Attempt(spelling: s, at: at, day: day, correct: ok, usedHint: hint, startSeconds: start)
@@ -20,8 +20,17 @@ import Testing
         #expect(l.proficiency("shan") == .met)
     }
 
-    @Test func fluentNeedsTwoDifferentDays() {
+    @Test func fluentOnTheSameDay() {
+        var l = Learner()                                  // 默认不要求隔天
+        l.record([hit(day: 1, start: 1.5), hit(day: 1, start: 1.5)])
+        #expect(l.proficiency("shan") == .met)
+        l.record([hit(day: 1, start: 1.4)])
+        #expect(l.proficiency("shan") == .fluent)       // 最近 3 次没错、上手 < 2 秒
+    }
+
+    @Test func fluentNeedsTwoDifferentDaysWhenTuned() {
         var l = Learner()
+        l.tuning.fluentDays = 2
         l.record([hit(day: 1, start: 1.5)])
         l.record([hit(day: 1, start: 1.5), hit(day: 1, start: 1.4)])
         #expect(l.proficiency("shan") == .met)          // 同一天打对多次不算

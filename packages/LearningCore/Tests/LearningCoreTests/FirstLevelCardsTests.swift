@@ -15,8 +15,7 @@ import Testing
         }
         for (i, lengths) in [[2: 1.0], [2: 0.85, 3: 0.15], [2: 0.55, 3: 0.25, 4: 0.2], [3: 0.4, 4: 0.35, 5: 0.25]].enumerated() {
             // 葫芦集（volume base）和初入江湖（volume nil）都一样
-            let d = Dealer(content: c, learner: l, probe: ProbeState(),
-                           context: DealContext(volume: i % 2 == 0 ? "base" : nil, today: 5, lengths: lengths,
+            let d = Dealer(content: c, learner: l, context: DealContext(volume: i % 2 == 0 ? "base" : nil, today: 5, lengths: lengths,
                                                 allowedSyllables: Volumes.baseCore),
                            seed: UInt64(i + 1))
             for _ in 0..<60 {

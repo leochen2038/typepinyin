@@ -50,7 +50,6 @@ final class DuelController {
     private(set) var summary: DuelSummary?
     private(set) var pausedForBackground = false
     private(set) var elapsed: Double = 0
-    private(set) var newMoveToast: String?
     private(set) var mistakeFlash = 0
     private(set) var stunned = false
     /// 气势档位 0–3：连招到 3、8、15 各升一档。
@@ -64,10 +63,6 @@ final class DuelController {
     private(set) var finaleBanner = false
     /// 打空对手血条的那一刀落下时，屏幕上打出「绝杀！」。
     private(set) var killBanner = false
-    /// 上一场用时（打赢的那场），没有就是 nil。
-    private(set) var lastDuelSeconds: Double?
-    /// 这一场比上一场快了几秒（只在更快时有值，只报收获）。
-    private(set) var fasterBy: Double?
     @ObservationIgnored private var grabSeq = 0
     /// 取字：主角用空着的后手把刚按的字母从键上取回来（剑气或绳镖，界面层负责画）。时间都用 Date 的钟，和 TimelineView 一致。
     /// 每个字母一次（Grab）：扬手 ropeWind 秒；出去 ropeOut 秒（镖飞到键上 / 气线连到字母）；停 ropeHold 秒；拽回 ropeBack 秒。
@@ -102,6 +97,12 @@ final class DuelController {
     /// 打完最后一个字母后先定格这么久（最后一个字变红弹一下、牌放大），再翻成回顾牌、主角出刀。
     static let finishBeat = 0.35
     @ObservationIgnored private var strikesInFlight = 0
+    /// 血条跟着刀走：出招时记下界面上现在的血（from）和引擎算好的血（to），每落一刀往 to 挪一段（hpProgress 0→1）。
+    /// 不然伤害在打完牌那一刻就扣了，血条先空、刀后到。
+    @ObservationIgnored private var hpFrom: (foe: Double, group: [Int: Double]) = (1, [:])
+    @ObservationIgnored private var hpTo: (foe: Double, group: [Int: Double]) = (1, [:])
+    @ObservationIgnored private var hpProgress = 1.0
+    @ObservationIgnored private var shownGroupHP: [Int: Double] = [:]
     @ObservationIgnored private var pendingWin = false
     /// 打完的牌浮起来回顾：拼音放大，主角每斩一刀，一个字母放大、爆开；最后一刀后飘走。
     struct Review: Equatable, Identifiable {
@@ -126,29 +127,95 @@ final class DuelController {
     }
     /// 正被回顾牌盖住的牌位。单独存一份：回顾每爆一个字母都会改 reviews，词牌不用跟着重算。
     private(set) var coveredSlots: Set<Int> = []
-    /// 气满了、必杀还没打出去：气条和必杀牌一起金光呼吸。
+    /// 气满了（最后一刀落下、气条涨满那一刻），还没送到必杀牌上：气条上一道光来回扫。
     private(set) var qiReady = false
-    /// 每露出一张必杀牌加一：金色光点从气条飞到牌上、牌闪一下。
+    /// 每送一次气到必杀牌上加一：一团朱红的气从气条飞到牌上、气条同时流空、牌上盖「必杀」印。
     private(set) var finisherArrival = 0
+    /// 这一次送气开始的时刻（nil = 没在送）。送气动画按它算进度：换一场、战斗画面重建时不会从头再飞一次。
+    private(set) var qiSentAt: Date?
+    /// 气已经送到牌上、印盖好了（必杀牌上显示印）。
+    private(set) var finisherSealed = false
+    /// 攒气也跟着刀走（同血条）：出招时记下气条上现在的气和引擎算好的气，每落一刀涨一段。
+    @ObservationIgnored private var qiFrom = 0.0
+    @ObservationIgnored private var qiTo = 0.0
+    /// 这一招把气攒满了：等最后一刀落下、气条涨满再亮、再送到牌上。
+    @ObservationIgnored private var qiFullPending = false
+    /// 气条涨满了、等必杀牌露出来；必杀牌露出来了、等气条涨满。两样都齐了才送气。
+    @ObservationIgnored private var qiShownFull = false
+    @ObservationIgnored private var finisherShown = false
+    /// 气送到牌上以后，气条显示空的，直到必杀打出去（引擎那边这段时间不攒气）。
+    @ObservationIgnored private var qiTransferred = false
     /// 这一场是群战（旅程里按站定，切片里看调参）。
     var groupFight: Bool { (plan?.setup.groupFight ?? tuning.groupFight) && tuning.cardsOnTable <= 1 }
     /// 光点从气条飞到牌上要多久（牌在光点落下时闪）。
-    static let qiFlight = 0.42
+    static let qiFlight = 0.3
+    /// 必杀前面几刀一共掉这一招伤害的多少（最后一刀掉剩下的）。
+    static let finisherLeadShare = 0.4
+    /// 送气前先聚气多久（气条里的光点旋进气条末端聚成气团），以及从开始到落到牌上一共多久。
+    static let qiGather = 0.14
+    static var qiArrive: Double { qiGather + qiFlight }
 
     /// 回顾收掉、新牌露出来：告诉引擎从这一刻开始算上手时间、连招间隔和对手蓄力。
     private func revealed(_ slot: Int) {
         apply(engine.cardRevealed(slot, at: CACurrentMediaTime()))
-        if engine.cards.indices.contains(slot), engine.cards[slot].isFinisher {
-            finisherArrival += 1
-            Task { @MainActor in
-                try? await Task.sleep(for: .seconds(Self.qiFlight))
-                self.sounds.play(.qicard)
-                self.sounds.hitHaptic(heavy: false)
-            }
+        if engine.cards.indices.contains(slot), engine.cards[slot].isFinisher, !qiTransferred {
+            finisherShown = true
+            sendQiIfReady()
+        }
+    }
+
+    /// 气条涨满、必杀牌也露出来了：气从气条飞到牌上，气条同时流空，落到牌上时盖印。
+    private func sendQiIfReady() {
+        guard qiShownFull, finisherShown, !qiTransferred else { return }
+        // 必杀牌还被回顾牌盖着：等回顾收掉、牌露出来（revealed 会再叫一次）
+        if let slot = engine.cards.firstIndex(where: \.isFinisher), coveredSlots.contains(slot) { return }
+        qiShownFull = false
+        finisherShown = false
+        qiTransferred = true
+        qiReady = false
+        finisherArrival += 1
+        qiSentAt = Date()
+        sync()
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(Self.qiArrive))
+            self.finisherSealed = true
+            self.sounds.play(.qicard)
+            self.sounds.hitHaptic(heavy: true)
+        }
+    }
+
+    /// 气条和送气的显示全部归零（开场、结算时）。
+    private func clearQi() {
+        qiReady = false
+        finisherSealed = false
+        qiFullPending = false
+        qiShownFull = false
+        finisherShown = false
+        qiTransferred = false
+        qiFrom = 0
+        qiTo = 0
+        qi = 0
+        qiSentAt = nil
+    }
+
+    /// 最后一刀落下、气条涨满：亮起来、响一声，停一拍再送到牌上。
+    private func qiFilledUp() {
+        qiFullPending = false
+        // 致命一刀把气攒满：这一场已经打完，不亮也不响（原来会一直亮到下一场开头，下一场一进来先看到气满再流空）
+        if engine.phase == .won || engine.phase == .lost { return }
+        qiReady = true
+        sounds.play(.qifull)
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(0.3))
+            guard self.qiReady else { return }
+            self.qiShownFull = true
+            self.sendQiIfReady()
         }
     }
     @ObservationIgnored private var reviewSeq = 0
     @ObservationIgnored private var lastCards: [Int: CardVM] = [:]
+    /// 刚打出的必杀牌上的词，定格时盖在画面上。
+    @ObservationIgnored private var finisherText = ""
 
     var tuning: Tuning
     let scene: DuelScene
@@ -186,6 +253,8 @@ final class DuelController {
     }
 
     @ObservationIgnored var plan: DuelPlan?
+    /// 玩家每一卷练到第几重（爆字母的效果按它；旅程开打前填，切片里是空的 = 都爆默认彩纸）。
+    var volumeRanks: [String: Int] = [:]
     /// 旅程填的小结卡片：多出来的收获和按钮（空 = 切片的「再来一场」）。
     var summaryGains: [String] = []
     var summaryActions: [SummaryAction] = []
@@ -252,7 +321,7 @@ final class DuelController {
             engine = Self.makeEngine(tuning: tuning, round: round)
         }
         summaryGains = []
-        qiReady = false
+        clearQi()
         summaryActions = []
         tip = nil
         sounds.hapticsOn = true
@@ -262,18 +331,24 @@ final class DuelController {
         scene.speed = 1 / Self.fxSlow            // -slowfx：人物动作也一起放慢
         scene.reset()
         scene.groupFinisherStyle = tuning.groupFinisherStyle
+        scene.anticipation = tuning.anticipation
+        scene.finisherFreeze = tuning.finisherFreeze
+        scene.onFreeze = { [weak self] secs in
+            guard let self else { return }
+            self.freeze(secs, caption: self.finisherText)
+        }
         if groupFight { scene.groupBegin() }
         summary = nil
         heat = 0
         moveMarks = []
         finisherMoves = []
-        fasterBy = nil
         finaleBanner = false
         killBanner = false
         strikesInFlight = 0
+        hpProgress = 1
+        shownGroupHP = [:]
         pendingWin = false
         movesPerDuel = tuning.movesPerDuel
-        lastDuelSeconds = UserDefaults.standard.object(forKey: "lastDuelSeconds") as? Double
         music.setLevel(0)
         keyboard?.showHint(nil)
         scene.setCharge(0)
@@ -311,6 +386,29 @@ final class DuelController {
         link = l
     }
 
+    /// 必杀定格时盖在画面上的成语（nil = 没在定格）。
+    var freezeCaption: String?
+    /// 定格多久、镜头往哪推。
+    var freezeSeconds = 0.8
+    var freezeAnchor = CGPoint(x: 0.5, y: 0.5)
+
+    /// 定格：比武停住（计时、对手蓄力都停，按键不算），盖上成语，秒数到了接着打。
+    func freeze(_ seconds: Double, caption: String) {
+        apply(engine.pause(.freeze, at: CACurrentMediaTime()))
+        freezeSeconds = seconds
+        freezeAnchor = scene.foeZoomPoint
+        freezeCaption = caption
+        sounds.play(.freeze)                      // 砍中的那一下先「锵」一声；必杀的轰响等慢镜头完、白闪时才响
+        sounds.hitHaptic(heavy: true)
+        sync()
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(seconds))
+            self.freezeCaption = nil
+            if case .paused(.freeze) = self.engine.phase { self.apply(self.engine.resume(at: CACurrentMediaTime())) }
+            self.sync()
+        }
+    }
+
     func pauseForBackground() {
         guard summary == nil else { return }
         apply(engine.pause(.background, at: CACurrentMediaTime()))
@@ -325,11 +423,15 @@ final class DuelController {
     }
 
     /// 演示用（-autoplay 启动参数）：自动按正确的字母打，每招之间停一下，方便在模拟器上截图看动效。
-    /// 加 -autostall：每张牌打完第一个字母后停 3 秒，看卡壳提示；加 -demoGrabStyle 0/1：剑气/绳镖，-demoGrabMode 1：一个音节取一次。
+    /// 加 -autostall：每张牌打完第一个字母后停 3 秒，看卡壳提示；加 -demoGrabStyle 0/1：剑气/绳镖，-demoGrabMode 1：一个音节取一次；-demoRankFx 5：所有字母按五重爆。
+    /// 加 -automiss：每三张牌有一张在第三个字母处按错一次，看结算里的「打顺了」「还手生」。
     private func autoplay() {
         let stall = ProcessInfo.processInfo.arguments.contains("-autostall")
+        let miss = ProcessInfo.processInfo.arguments.contains("-automiss")
+        var missedOn = Set<Int>()
         if UserDefaults.standard.object(forKey: "demoGrabStyle") != nil { tuning.grabStyle = UserDefaults.standard.integer(forKey: "demoGrabStyle") }
         if UserDefaults.standard.object(forKey: "demoGrabMode") != nil { tuning.grabMode = UserDefaults.standard.integer(forKey: "demoGrabMode") }
+        if UserDefaults.standard.object(forKey: "demoRankFx") != nil { tuning.rankFx = UserDefaults.standard.integer(forKey: "demoRankFx") }   // 测五重的爆字母卡不卡
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(1.5))
             while summary == nil {
@@ -339,7 +441,11 @@ final class DuelController {
                 } else {
                     letter = engine.expectedLetters.first
                 }
-                guard let ch = letter else { try? await Task.sleep(for: .seconds(0.2)); continue }
+                guard var ch = letter else { try? await Task.sleep(for: .seconds(0.2)); continue }
+                if miss, case .card(let i) = engine.target, engine.cards.indices.contains(i), engine.cards[i].typed.count == 2,
+                   engine.moveMarks.count % 3 == 1, missedOn.insert(engine.moveMarks.count).inserted {
+                    ch = ch == "j" ? "k" : "j"
+                }
                 let before = engine.moveMarks.count
                 let now = CACurrentMediaTime()
                 key(KeyEvent(kind: .letter(ch), downAt: now, upAt: now, commitAt: now))
@@ -538,7 +644,11 @@ final class DuelController {
                 updateHeat()
             case .strike(let i, let dmg, let flaw, let finisher, let heavy):
                 if guiding { endGuide() }
-                if finisher { finisherMoves.insert(engine.moveMarks.count - 1); qiReady = false }
+                if finisher {
+                    finisherMoves.insert(engine.moveMarks.count - 1)
+                    qiReady = false; qiTransferred = false; finisherSealed = false
+                    finisherText = lastCards[i]?.text ?? ""
+                }
                 scene.setCharge(1)
                 let letters = (lastStruck[i] ?? "").map(String.init)
                 let n = max(1, letters.count)
@@ -568,6 +678,11 @@ final class DuelController {
                 let livesLeft = engine.opponent.lives
                 if lifeLost { knockdownHold = true }            // 血条先停在空的
                 let big = lethal || lifeLost                    // 打空一条血：照绝杀的冲击来，但不出「绝杀！」
+                hpFrom = (Double(foeHP), shownGroupHP)
+                hpTo = (lifeLost ? 0 : Double(max(0, engine.opponent.hp)), groupHPNow())
+                hpProgress = 0
+                qiFrom = Double(qi)
+                qiTo = Double(engine.player.qi)
                 // 定格之后牌翻成回顾牌，主角才出刀：每刀爆一个字母
                 Task { @MainActor in
                     try? await Task.sleep(for: .seconds(Self.finishBeat))
@@ -577,6 +692,15 @@ final class DuelController {
                                                       lethal: big, combo: self.engine.player.combo, minGap: self.tuning.slashMinGap) { [weak self] k in
                         guard let self else { return }
                         let last = k == n - 1
+                        // 这一刀落下，血条挪一段、气条涨一段。必杀和致命一击：前面几刀一共只掉 40%，最后一刀掉剩下的 60%
+                        // （原来每刀一样多，最后那一下反而显得轻）
+                        if (finisher || big) && n > 1 {
+                            self.hpProgress = last ? 1 : Self.finisherLeadShare * Double(k + 1) / Double(n - 1)
+                        } else {
+                            self.hpProgress = Double(k + 1) / Double(n)
+                        }
+                        self.sync()
+                        if last && self.qiFullPending { self.qiFilledUp() }
                         if last && (finisher || big) {
                             self.sounds.play(.finisher)
                             self.sounds.finisherHaptic()
@@ -596,7 +720,7 @@ final class DuelController {
                             }
                         }
                         if last && group {
-                            for id in downed { self.scene.groupDown(id) }
+                            self.scene.groupDownAll(downed)
                             Task { @MainActor in
                                 try? await Task.sleep(for: .seconds(0.4))
                                 for f in joined { self.scene.groupAdd(id: f.id, tier: f.tier.rawValue, slot: f.slot, walkIn: true) }
@@ -644,15 +768,8 @@ final class DuelController {
             case .chargeInterrupted:
                 scene.block()
             case .qiFull:
-                qiReady = true
-                sounds.play(.qifull)
-            case .newMove(let s):
-                newMoveToast = s
-                sounds.play(.newmove)
-                Task { @MainActor in
-                    try? await Task.sleep(for: .seconds(1.6))
-                    if self.newMoveToast == s { self.newMoveToast = nil }
-                }
+                qiFullPending = true                           // 等这一招最后一刀落下、气条涨满再亮
+                qiTo = 100
             case .mistake(_, let dmg):
                 showHurt(dmg)
                 mistakeFlash += 1
@@ -663,7 +780,7 @@ final class DuelController {
                 if strikesInFlight > 0 && !AppResources.isUITest { pendingWin = true } else { win() }
             case .lost:
                 scene.playerDown()
-                finish()
+                endAfterBeat()
             case .cardDealt(let i):
                 // 新牌没被回顾盖住（比如这招没生成回顾牌）：马上算露出来，别让它一直等着不计时
                 if !coveredSlots.contains(i) { revealed(i) }
@@ -726,6 +843,8 @@ final class DuelController {
 
     private func strikeLanded() {
         strikesInFlight = max(0, strikesInFlight - 1)
+        if strikesInFlight == 0 { hpProgress = 1 }        // 保险：刀都落完了，血条对上引擎
+        if strikesInFlight == 0 && qiFullPending { qiFilledUp() }
         guard pendingWin, strikesInFlight == 0 else { return }
         pendingWin = false
         Task { @MainActor in
@@ -737,7 +856,20 @@ final class DuelController {
     private func win() {
         scene.foeDown()
         sounds.play(.win)
-        finish()
+        endAfterBeat()
+    }
+
+    /// 倒地动画（0.6 秒）看完、再停一拍才出结算；原来倒地和结算同时出，倒地被结算盖住，一打完就跳结算。
+    static let endBeat = 1.3
+
+    private func endAfterBeat() {
+        guard !AppResources.isUITest else { finish(); return }
+        let r = round
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(Self.endBeat))
+            guard self.round == r, self.summary == nil else { return }   // 这一拍里重开了或离开了，就不再结算
+            self.finish()
+        }
     }
 
     private func updateHeat() {
@@ -751,29 +883,36 @@ final class DuelController {
     }
 
     private func finish() {
-        if let s = engine.summary, s.won {
-            if let last = lastDuelSeconds, s.durationSeconds < last - 0.5 {
-                fasterBy = last - s.durationSeconds
-                sounds.play(.record)
-            }
-            UserDefaults.standard.set(s.durationSeconds, forKey: "lastDuelSeconds")
-        }
         heat = 0
         scene.setHeat(0)
         music.setLevel(0)
         if let p = plan, let s = engine.summary { p.onFinish(s, engine.attempts, engine.player.secondsPerLetter) }
+        clearQi()                                         // 结算时就清掉，下一场的画面出来时气条已经是空的
         summary = engine.summary
         link?.invalidate()
         link = nil
     }
+
+    /// 群战每个人现在（引擎里）的血，0–1。
+    private func groupHPNow() -> [Int: Double] {
+        Dictionary(uniqueKeysWithValues: engine.foes.map { ($0.id, Double(max(0, $0.hp)) / Double(max(1, $0.maxHP))) })
+    }
+
+    private func lerp(_ a: Double, _ b: Double, _ p: Double) -> Double { a + (b - a) * min(1, max(0, p)) }
 
     /// 把引擎状态同步给界面（只在变化时赋值，避免无谓的重绘）。
     private func sync() {
         let t = tuning
         if scene.groupMode {
             let now = engine.gameClock
-            scene.groupPressure(Dictionary(uniqueKeysWithValues: engine.foes.map { ($0.id, $0.pressureProgress(at: now)) }),
-                                hp: Dictionary(uniqueKeysWithValues: engine.foes.map { ($0.id, Double(max(0, $0.hp)) / Double(max(1, $0.maxHP))) }))
+            let target = groupHPNow()
+            var hp = target
+            if hpProgress < 1 {
+                for (id, to) in target { hp[id] = lerp(hpFrom.group[id] ?? hpTo.group[id] ?? to, hpTo.group[id] ?? to, hpProgress) }
+                for (id, from) in hpFrom.group where target[id] == nil { hp[id] = lerp(from, 0, hpProgress) }   // 这一招打倒的：倒下前血条也跟着刀走空
+            }
+            shownGroupHP = hp
+            scene.groupPressure(Dictionary(uniqueKeysWithValues: engine.foes.map { ($0.id, $0.pressureProgress(at: now)) }), hp: hp)
         }
         let newCards: [CardVM] = engine.cards.enumerated().map { i, c in
             CardVM(id: c.id, text: c.word.text, syllables: c.word.syllables, typed: c.typed, weight: c.weight(t).rawValue,
@@ -784,9 +923,19 @@ final class DuelController {
         if newCards != cards { cards = newCards }
         set(\.playerHP, engine.player.hp)
         set(\.playerMaxHP, t.playerMaxHP)
-        set(\.qi, engine.player.qi)
+        if qiTransferred {
+            set(\.qi, 0)
+        } else if hpProgress < 1 {
+            set(\.qi, Int(lerp(qiFrom, qiTo, hpProgress).rounded()))
+        } else {
+            set(\.qi, engine.player.qi)
+        }
         set(\.combo, engine.player.combo)
-        set(\.foeHP, knockdownHold ? 0 : engine.opponent.hp)
+        if hpProgress < 1 {
+            set(\.foeHP, Int(lerp(hpFrom.foe, hpTo.foe, hpProgress).rounded()))
+        } else {
+            set(\.foeHP, knockdownHold ? 0 : engine.opponent.hp)
+        }
         set(\.foeMaxHP, engine.opponent.maxHP)
         set(\.foeMaxLives, engine.opponent.maxLives)
         if !knockdownHold && strikesInFlight == 0 { set(\.foeLives, engine.opponent.lives) }   // 开场、重开：直接对上

@@ -387,15 +387,23 @@ final class DuelScene: SKScene {
         let per = chars.count <= 5 ? 0.1 : max(minGap, 0.6 / Double(chars.count))
         // 必杀：先蓄力半秒（场地变暗、剑光拉满、身上气浪外扩），再冲上去连斩
         let pre = finisher && !reducedMotion ? 0.5 : 0
-        let times = FigureNode.slashTimes(slashes: n, per: per).map { $0 + pre }
+        // 预备动作（#121）：冲出去前先退、压扁、后仰攒劲；冲刺时长跟着等比变
+        let wind = reducedMotion ? 0 : anticipation
+        let dash = FigureNode.launchSeconds(wind: wind)
+        let times = FigureNode.slashTimes(slashes: n, per: per, dash: dash).map { $0 + pre + wind }
+        let launch = { [weak self] in
+            guard let self, let p = self.player else { return }
+            p.windUp(seconds: wind, back: 44 * self.size.width / 539)      // 原版 539px 宽的卡片里退 44px，按场景宽度换算
+            self.run(.wait(forDuration: wind)) { [weak self] in
+                guard let self, let p = self.player else { return }
+                _ = p.dashAndSlash(distance: max(0, gap), slashes: n, per: per, dash: dash, reduced: self.reducedMotion)
+            }
+        }
         if pre > 0 {
             finisherCharge()
-            run(.wait(forDuration: pre)) { [weak self] in
-                guard let self, let p = self.player else { return }
-                _ = p.dashAndSlash(distance: max(0, gap), slashes: n, per: per, reduced: self.reducedMotion)
-            }
+            run(.wait(forDuration: pre)) { launch() }
         } else {
-            _ = p.dashAndSlash(distance: max(0, gap), slashes: n, per: per, reduced: reducedMotion)
+            launch()
         }
         let color: UIColor = finisher || heat >= 3 ? Palette.uiRed : Palette.uiGold
         for (k, t) in times.enumerated() {
@@ -412,6 +420,15 @@ final class DuelScene: SKScene {
                         for n in self.groupOthers { self.burst(on: n, damage: damage, big: true, gold: false, red: false) }
                     }
                     if self.heat >= 2 { self.inkSplash() }
+                    if finisher && self.finisherFreeze > 0 && !self.reducedMotion {
+                        // 定格（#040）：最后一刀落下的这一帧停住，之后才白闪、交叉、击飞，音效和收招回调也等定格完
+                        self.freezeFrame(self.finisherFreeze) { [weak self] in
+                            self?.finisherImpact()
+                            self?.setCharge(0)
+                            onHit(k)
+                        }
+                        return
+                    }
                     if finisher || lethal {
                         self.finisherImpact()           // 必杀和打空对手血条的那一刀：顿帧、白闪、大交叉、击飞
                     } else {
@@ -429,15 +446,71 @@ final class DuelScene: SKScene {
     /// 顿帧：场景几乎停住一小会儿，打击感更重。
     private var hitStopDepth = 0
     private var hitStopSpeed: CGFloat = 1
-    private func hitStop(_ seconds: Double) {
+    private func hitStop(_ seconds: Double, factor: CGFloat = 0.05) {
         guard !reducedMotion else { return }
+        if let r = speedRamp { speed = r.base; speedRamp = nil }   // 正在慢镜头渐变：先收掉，顿帧完回到原速
         if hitStopDepth == 0 { hitStopSpeed = speed }
         hitStopDepth += 1
-        speed = hitStopSpeed * 0.05
+        speed = hitStopSpeed * factor
         DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
             guard let self else { return }
             self.hitStopDepth -= 1
             if self.hitStopDepth == 0 { self.speed = self.hitStopSpeed }
+        }
+    }
+
+    /// 预备动作的总时长（秒，0 = 不做），见 FigureNode.windUp。
+    var anticipation = 0.14
+    /// 必杀最后一刀定格几秒（0 = 不定格）。
+    var finisherFreeze = 0.8
+    /// 对手在画面里的位置（0–1，左上为原点），定格时镜头往这里推。
+    var foeZoomPoint: CGPoint {
+        guard let f = foe, size.width > 0, size.height > 0 else { return CGPoint(x: 0.5, y: 0.5) }
+        return CGPoint(x: f.position.x / size.width, y: 1 - (f.position.y + 90 * f.yScale) / size.height)
+    }
+
+    /// 定格开始时通知外面（停住比武计时、盖上边框和成语），参数是秒数。
+    var onFreeze: ((Double) -> Void)?
+
+    // Motion Prompt #040 · MIT License (c) 2026 Shohei Ohtaki · https://showheyohtaki.github.io/motion-prompt/#040
+    /// 定格（Motion Prompt #040 フリーズフレーム）：最后一刀落下时画面几乎停住 seconds 秒，然后从停住的地方接着走。
+    /// 原版是完全停住；试玩时看着像卡住，改成按 #038 平滑慢到 6%，界面层再加镜头推近、上下黑边和盖章字幕（场景慢下来时自己的动作也慢了，所以放在界面层）。
+    private func freezeFrame(_ seconds: Double, then: @escaping () -> Void) {
+        onFreeze?(seconds)
+        // 不停死：平滑降到 6% 的速度（碎片和剑光还在慢慢飘），快结束时再平滑升回来
+        let base = hitStopDepth > 0 ? hitStopSpeed : speed
+        speedRamp = SpeedRamp(total: seconds, edge: min(0.15, seconds / 3), base: base, low: base * 0.06)
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { then() }
+    }
+
+    // Motion Prompt #038 · MIT License (c) 2026 Shohei Ohtaki · https://showheyohtaki.github.io/motion-prompt/#038
+    /// 速度渐变（Motion Prompt #038 スピードランプ）：播放速度用 2 次 easeInOut 平滑地变（原版 2.4 倍 → 0.25 倍用 0.7 秒）。
+    /// 这里 1 → 0.06 倍，进出各 edge 秒（默认 0.15 秒，按定格时长等比缩短的），中间保持慢速。按真实时间算，不受场景自己的速度影响。
+    private struct SpeedRamp {
+        let total: Double, edge: Double, base: CGFloat, low: CGFloat
+        var start: TimeInterval?
+
+        func speed(at t: Double) -> CGFloat {
+            let eIO: (Double) -> Double = { x in x < 0.5 ? 2 * x * x : 1 - pow(-2 * x + 2, 2) / 2 }
+            let p: Double
+            if t < edge { p = eIO(t / edge) }                         // 降
+            else if t > total - edge { p = eIO(max(0, total - t) / edge) }   // 升
+            else { p = 1 }
+            return base + (low - base) * CGFloat(p)
+        }
+    }
+    private var speedRamp: SpeedRamp?
+
+    override func update(_ currentTime: TimeInterval) {
+        stepImpact(currentTime)
+        guard var r = speedRamp else { return }
+        if r.start == nil { r.start = currentTime; speedRamp = r }
+        let t = currentTime - (r.start ?? currentTime)
+        if t >= r.total {
+            if hitStopDepth == 0 { speed = r.base }
+            speedRamp = nil
+        } else {
+            speed = r.speed(at: t)
         }
     }
 
@@ -482,18 +555,91 @@ final class DuelScene: SKScene {
     /// 必杀落下时全场的那一下：顿帧、白闪、重震；之后场地亮回来，主角收刀。
     private func impactFlash() {
         hitStop(0.18)
-        let flash = SKSpriteNode(color: .white, size: size)
-        flash.anchorPoint = .zero
-        flash.zPosition = 20
-        flash.alpha = 0.85
-        addChild(flash)
-        flash.run(.sequence([.fadeOut(withDuration: 0.3), .removeFromParent()]))
+        if reducedMotion {
+            let flash = SKSpriteNode(color: .white, size: size)
+            flash.anchorPoint = .zero
+            flash.zPosition = 20
+            flash.alpha = 0.85
+            addChild(flash)
+            flash.run(.sequence([.fadeOut(withDuration: 0.3), .removeFromParent()]))
+        } else {
+            impactFrame(at: foe.map { CGPoint(x: $0.position.x - 10 * $0.yScale, y: $0.position.y + 90 * $0.yScale) }
+                            ?? CGPoint(x: size.width / 2, y: size.height / 2))
+        }
         shake(amount: 12)
         run(.wait(forDuration: 0.35)) { [weak self] in
             guard let self else { return }
             self.childNode(withName: "dim")?.run(.sequence([.fadeOut(withDuration: 0.3), .removeFromParent()]))
             self.player?.sheathe()
         }
+    }
+
+    /// 冲击帧（参考 pixelfx 的 impacts/impact-frame，按我们的墨色和米白重画）：按 30 帧算，
+    /// 前 2 帧米白底、墨色放射线从画面外冲向命中点，接 2 帧反色（墨底白线），再 4 帧线往外退出画面、淡掉，一共约 0.27 秒。
+    /// 这时场景正在顿帧（速度 5%），所以在 update 里按真实时间切，不用 SKAction。
+    private func impactFrame(at hit: CGPoint) {
+        if let old = impact { old.bg.removeFromParent(); old.burst.removeFromParent(); impact = nil }
+        let paper = UIColor(red: 0.965, green: 0.945, blue: 0.902, alpha: 1), ink = Palette.uiInk
+        let k = size.width / 320                                // 原版画面 320 宽，线的粗细、离命中点的距离按这个换算
+        let reach = hypot(size.width, size.height) + 40
+        let path = CGMutablePath()
+        let n = 64
+        for i in 0..<n {
+            let thick = Double.random(in: 0..<1) < 0.18
+            let a = (Double(i) + .random(in: 0.1...0.9)) / Double(n) * 2 * .pi
+            let inner = (thick ? CGFloat.random(in: 30...48) : .random(in: 18...70)) * k
+            let half = (thick ? CGFloat.random(in: 5...8) : .random(in: 1.2...3.6)) * k
+            let d = CGVector(dx: cos(a), dy: sin(a)), q = CGVector(dx: -d.dy, dy: d.dx)
+            path.move(to: CGPoint(x: d.dx * inner, y: d.dy * inner))                  // 尖头朝着命中点
+            path.addLine(to: CGPoint(x: d.dx * reach + q.dx * half, y: d.dy * reach + q.dy * half))
+            path.addLine(to: CGPoint(x: d.dx * reach - q.dx * half, y: d.dy * reach - q.dy * half))
+            path.closeSubpath()
+        }
+        let bg = SKSpriteNode(color: paper, size: size)
+        bg.anchorPoint = .zero
+        bg.zPosition = 20
+        addChild(bg)
+        let burst = SKNode()
+        burst.position = hit
+        burst.zPosition = 21
+        let lines = SKShapeNode(path: path)
+        lines.fillColor = ink
+        lines.strokeColor = .clear
+        burst.addChild(lines)
+        addChild(burst)
+        impact = Impact(bg: bg, burst: burst, lines: lines, paper: paper, ink: ink)
+    }
+
+    /// 冲击帧正在演：按真实时间切三段（米白底 → 反色 → 线往外退），每段至少画两帧，主线程卡一下也不会跳过反色那段。
+    private struct Impact {
+        let bg: SKSpriteNode, burst: SKNode, lines: SKShapeNode, paper: UIColor, ink: UIColor
+        var phase = 0, phaseStart: TimeInterval?, framesInPhase = 0
+    }
+    private var impact: Impact?
+
+    private func stepImpact(_ now: TimeInterval) {
+        guard var m = impact else { return }
+        let frame = 1.0 / 30
+        if m.phaseStart == nil { m.phaseStart = now }
+        m.framesInPhase += 1
+        let t = now - (m.phaseStart ?? now)
+        let len = m.phase < 2 ? 2 * frame : 4 * frame          // 白 2 帧、反色 2 帧、退出 4 帧（按 30 帧算）
+        if m.phase == 2 {
+            let p = CGFloat(min(1, t / len))
+            m.burst.setScale(1 + 1.4 * p * p)
+            m.burst.alpha = 1 - p * 0.8
+        }
+        if t >= len && m.framesInPhase >= 2 {
+            m.phase += 1
+            m.phaseStart = now
+            m.framesInPhase = 0
+            switch m.phase {
+            case 1: m.bg.color = m.ink; m.lines.fillColor = m.paper                     // 反色
+            case 2: m.bg.removeFromParent(); m.lines.fillColor = m.ink                  // 底去掉，线往外退
+            default: m.burst.removeFromParent(); impact = nil; return
+            }
+        }
+        impact = m
     }
 
     /// 打在一个人身上的大交叉剑光，人往后一退再回来（dir = 1 往右退，-1 往左退）。
@@ -666,7 +812,7 @@ final class DuelScene: SKScene {
     func mistake() { shake(amount: 4) }
 
     func foeDown() { foe?.knockDown(reduced: reducedMotion) }
-    func playerDown() { player?.knockDown(reduced: reducedMotion) }
+    func playerDown() { player?.knockDown(reduced: reducedMotion, fade: false) }
 
     // MARK: - 群战（试玩）
 
@@ -766,7 +912,7 @@ final class DuelScene: SKScene {
 
     /// 群战的必杀：谁挨打都要看得出是被什么打中的（groupFinisherStyle：0 横扫剑气、1 连斩、2 旋身）。
     /// 返回每一刀的时刻（回顾牌按它爆字母）；最后一刀的回调放在全场都挨完之后，倒下、补位从那时开始演。
-    var groupFinisherStyle = 0
+    var groupFinisherStyle = 1
 
     private func groupFinisher(chars: [String], damage: Int, per: Double, onHit: @escaping (Int) -> Void) -> [Double] {
         guard let p = player else { return [0] }
@@ -790,8 +936,13 @@ final class DuelScene: SKScene {
             let per = max(per, 0.09)
             let m = targets.count
             let owner = (0..<n).map { min(m - 1, $0 * m / n) }
-            times = FigureNode.slashTimes(slashes: n, per: per).map { $0 + pre }
-            run(.wait(forDuration: pre)) { _ = p.dashAndSlash(distance: 0, slashes: n, per: per, reduced: false) }   // 只要挥剑的动作
+            let wind = anticipation                                          // 预备动作（#121）：蓄力完先退半步、后仰，再闪身出去
+            let dash = FigureNode.launchSeconds(wind: wind)
+            times = FigureNode.slashTimes(slashes: n, per: per, dash: dash).map { $0 + pre + wind }
+            run(.wait(forDuration: pre)) { [weak self] in
+                p.windUp(seconds: wind, back: 44 * (self?.size.width ?? 539) / 539)
+                self?.run(.wait(forDuration: wind)) { _ = p.dashAndSlash(distance: 0, slashes: n, per: per, dash: dash, reduced: false) }   // 只要挥剑的动作
+            }
             for j in 0..<m {
                 guard let first = owner.firstIndex(of: j) else { continue }
                 let x = reach(targets[j])
@@ -808,13 +959,24 @@ final class DuelScene: SKScene {
                     guard let self else { return }
                     self.foe = targets[j]
                     self.slash(char: chars[k], index: k, color: red, big: lastOfOwner, around: targets[j])
+                    if k == n - 1 && self.finisherFreeze > 0 {
+                        // 最后一刀定格（#040，同单挑）：砍中、爆数字，慢镜头；完了才大交叉、冲击帧、回调
+                        targets[j].hurt(reduced: false)
+                        self.burst(on: targets[j], damage: damage, big: true, gold: false, red: false)
+                        self.freezeFrame(self.finisherFreeze) { [weak self] in
+                            self?.crossAndKnockBack(targets[j])
+                            self?.impactFlash()
+                            onHit(k)
+                        }
+                        return
+                    }
                     if lastOfOwner { hit(targets[j]) } else { targets[j].hurt(reduced: false) }
                     if k == n - 1 { self.impactFlash() }
                     onHit(k)
                 }
             }
             lastAt = times[n - 1]
-            run(.wait(forDuration: lastAt + 0.12)) {
+            run(.wait(forDuration: lastAt + 0.12)) {                       // 定格时场景慢下来，这一步也跟着等
                 let back = SKAction.moveTo(x: home, duration: 0.2)
                 back.timingMode = .easeInEaseOut
                 p.run(back)
@@ -932,13 +1094,19 @@ final class DuelScene: SKScene {
     }
 
     /// 被打倒：倒下、淡出、拿掉。
-    func groupDown(_ id: Int) {
+    func groupDown(_ id: Int, after delay: Double = 0) {
         guard let f = group[id] else { return }
-        f.knockDown(reduced: reducedMotion)
         groupBars[id]?.bg.removeFromParent()
         group[id] = nil; groupBars[id] = nil; groupSlots[id] = nil; groupTiers[id] = nil
-        f.run(.sequence([.wait(forDuration: 0.7), .fadeOut(withDuration: 0.25), .removeFromParent()]))
         if foe === f { foe = group.values.first }
+        f.run(.sequence([.wait(forDuration: delay), .run { [weak self] in f.knockDown(reduced: self?.reducedMotion ?? false) },
+                         .wait(forDuration: 0.8), .removeFromParent()]))
+    }
+
+    /// 一招打倒好几个（必杀打全场）：从近到远一个接一个倒，每人隔 0.06 秒，不同时乱成一团。
+    func groupDownAll(_ ids: [Int]) {
+        let order = ids.compactMap { id in group[id].map { (id, $0.position.x) } }.sorted { $0.1 < $1.1 }.map(\.0)
+        for (i, id) in order.enumerated() { groupDown(id, after: Double(i) * 0.06) }
     }
 
     func reset() {
@@ -1005,14 +1173,24 @@ final class DuelScene: SKScene {
         }
     }
 
+    // Motion Prompt #024 · MIT License (c) 2026 Shohei Ohtaki · https://showheyohtaki.github.io/motion-prompt/#024
+    /// 震屏（Motion Prompt #024 インパクトシェイク）：横 A·e^(−5t)·sin(2π·5t)、纵 0.73A·e^(−5t)·cos(2π·6.5t)、
+    /// 转 0.02·(A/15)·e^(−5t)·sin(2π·5t+0.6)，越震越小。原版 A = 15、震 1.1 秒；这里 A 是传进来的力度（重招 5、必杀 12），
+    /// 小的震 0.6 秒、大的 0.9 秒（e^(−5t) 到那时已经剩不到一成）。原来是左右各晃一下就停，0.16 秒。
     private func shake(amount: CGFloat) {
         guard !reducedMotion else { return }
         world.removeAction(forKey: "shake")
-        let seq = SKAction.sequence([
-            .moveBy(x: amount, y: 0, duration: 0.03), .moveBy(x: -2 * amount, y: 0, duration: 0.05),
-            .moveBy(x: amount * 1.4, y: 0, duration: 0.04), .move(to: .zero, duration: 0.04),
-        ])
-        world.run(seq, withKey: "shake")
+        let dur = amount >= 8 ? 0.9 : 0.6
+        let a = Double(amount)
+        let cx = Double(size.width / 2), cy = Double(size.height / 2)       // 绕画面中心转，不是绕左下角
+        let act = SKAction.customAction(withDuration: dur) { n, el in
+            let t = Double(el), d = exp(-5 * t)
+            let r = 0.02 * (a / 15) * d * sin(2 * .pi * 5 * t + 0.6)
+            let x = a * d * sin(2 * .pi * 5 * t), y = 0.73 * a * d * cos(2 * .pi * 6.5 * t)
+            n.position = CGPoint(x: x + cx - (cx * cos(r) - cy * sin(r)), y: y + cy - (cx * sin(r) + cy * cos(r)))
+            n.zRotation = CGFloat(r)
+        }
+        world.run(.sequence([act, .run { [weak self] in self?.world.position = .zero; self?.world.zRotation = 0 }]), withKey: "shake")
     }
 
     // MARK: - 命数
