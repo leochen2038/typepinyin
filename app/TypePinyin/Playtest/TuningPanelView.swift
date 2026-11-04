@@ -1,4 +1,5 @@
 import DuelCore
+import LearningCore
 import SwiftUI
 
 /// 隐藏的调参面板：所有比武数值都能改，下一场生效（键盘相关的立即生效），重启后保留。
@@ -94,9 +95,37 @@ struct TuningPanelView: View {
         I(label: "场上词牌数（1 = 一张牌加对手蓄力）", kp: \.cardsOnTable, range: 1...3),
     ]
 
+    /// 调试：在长卷画面打开面板时，可以直接跳到这一趟的某一站（比武里不显示）。
+    @ViewBuilder private var jumpSection: some View {
+        if let j = c.journey, case .region = j.screen, j.regionStage == .scroll, let route = j.route {
+            Section("调试：跳到第几站") {
+                ForEach(Array(route.stations.enumerated()), id: \.offset) { i, st in
+                    Button {
+                        j.debugJump(to: i)
+                        dismiss()
+                    } label: {
+                        LabeledContent("第 \(i + 1) 站", value: Self.stationLabel(st) + (i == j.stationIndex ? " · 当前" : ""))
+                    }
+                    .accessibilityIdentifier("jump-\(i)")
+                }
+            }
+        }
+    }
+
+    private static func stationLabel(_ st: Station) -> String {
+        let name = st.foe?.name ?? ""
+        switch st.kind {
+        case .duel: return name
+        case .group: return "群战 \(name)"
+        case .boss: return "掌门 \(name)"
+        case .encounter: return "奇遇"
+        }
+    }
+
     var body: some View {
         NavigationStack {
             Form {
+                jumpSection
                 Section("数据") {
                     LabeledContent("按键延迟 平均", value: String(format: "%.0f 毫秒", c.latency.averageMs))
                     LabeledContent("按键延迟 最慢", value: String(format: "%.0f 毫秒", c.latency.worstMs))
@@ -118,6 +147,8 @@ struct TuningPanelView: View {
                         Text("简版（半秒快爆）").tag(0)
                     }
                     .pickerStyle(.menu)
+                    Toggle("每个字都有命中声和震动", isOn: $t.textCharHit)
+                    Toggle("新画法（场景）", isOn: Binding(get: { t.artStyle == 1 }, set: { t.artStyle = $0 ? 1 : 0 }))
                 } header: {
                     Text("打什么（试玩）")
                 } footer: {
@@ -153,20 +184,28 @@ struct TuningPanelView: View {
                     Toggle("每招的小圆点（状态栏下面，最近 10 招）", isOn: $t.moveDots)
                 }
                 Section {
-                    Picker("试看重数", selection: $t.rankFx) {
-                        Text("关（默认彩纸）").tag(-1)
-                        ForEach(0...5, id: \.self) { Text(["零重", "一重", "二重", "三重", "四重", "五重"][$0]).tag($0) }
+                    // 开：按玩家拿到的秘籍和练到的重数（rankFx = -1）；关：所有字母按下面指定的重数和主题来爆
+                    Toggle("按玩家的秘籍和重数", isOn: Binding(get: { t.rankFx < 0 }, set: { on in
+                        t.rankFx = on ? -1 : 1
+                        if on { t.rankFxTheme = "" }
+                    }))
+                    if t.rankFx >= 0 {
+                        Picker("重数", selection: $t.rankFx) {
+                            ForEach(0...5, id: \.self) { Text(["零重（彩纸）", "一重", "二重", "三重", "四重", "五重"][$0]).tag($0) }
+                        }
+                        .pickerStyle(.menu)
+                        Picker("主题", selection: $t.rankFxTheme) {
+                            Text("按字所属的卷").tag("")
+                            ForEach(RankFx.order, id: \.self) { v in Text(RankFx.themeLabel(v)).tag(v) }
+                        }
+                        .pickerStyle(.menu)
                     }
-                    .pickerStyle(.menu)
-                    Picker("主题", selection: $t.rankFxTheme) {
-                        Text("按字所属的卷").tag("")
-                        ForEach(RankFx.order, id: \.self) { v in Text(RankFx.themeLabel(v)).tag(v) }
-                    }
-                    .pickerStyle(.menu)
                 } header: {
-                    Text("秘籍重数的爆字母（试看）")
+                    Text("爆字母的特效")
                 } footer: {
-                    Text("一重换成这一卷的主题粒子，迸得少；二重多一些；三重最多；四重再往上冲；五重冲得更猛、散得更开。打字时打完一个字也迸主题粒子。")
+                    Text(t.rankFx < 0
+                         ? "按玩家拿到的秘籍和练到的重数来爆：没拿到的卷是彩纸；在一卷秘籍的地区里，这一卷的音节至少按一重爆。"
+                         : "所有字母按指定的重数和主题来爆。一重换成这一卷的主题粒子，迸得少；二重多一些；三重最多；四重再往上冲；五重冲得更猛、散得更开。")
                 }
                 Section {
                     Picker("出招前预备", selection: $t.anticipation) {
@@ -233,11 +272,17 @@ struct TuningPanelView: View {
                 Section {
                     Button("日子 +1（现在偏移 \(DayClock.offset) 天）") { DayClock.advanceOneDay(); dayTick += 1 }
                     Toggle("跳过旅程动画", isOn: Binding(get: { JourneyFlags.fast }, set: { JourneyFlags.fast = $0 }))
+                    Menu("标为拿到…") {
+                        Button("全部十卷") { c.journey?.debugObtain(RankFx.order); dismiss() }
+                        ForEach(RankFx.order, id: \.self) { v in
+                            Button("《\(Volumes.name(v))》") { c.journey?.debugObtain([v]); dismiss() }
+                        }
+                    }
                     Button("清空进度", role: .destructive) { confirmReset = true }
                 } header: {
                     Text("旅程（试玩）")
                 } footer: {
-                    Text("清空进度会删掉这台手机上的全部旅程进度（学会的音节、秘籍、走到哪），下次打开从初入江湖开始，用来换人试玩。日子 +1 用来试熟练、复习和每天新学的上限。")
+                    Text("清空进度会删掉这台手机上的全部旅程进度（学会的音节、秘籍、走到哪），下次打开从初入江湖开始，用来换人试玩。日子 +1 用来试熟练、复习和每天新学的上限。标为拿到：直接把某几卷算作拿到、对应地区算打通，用来看十方印和升重。")
                 }
                 .id(dayTick)
                 .confirmationDialog("清空这台手机上的全部旅程进度？", isPresented: $confirmReset, titleVisibility: .visible) {

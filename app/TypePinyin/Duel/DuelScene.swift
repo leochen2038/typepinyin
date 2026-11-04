@@ -100,6 +100,9 @@ final class DuelScene: SKScene {
     /// 主角胸口（场景坐标），剑气打进这里。
     var playerChest: CGPoint? { player.map { CGPoint(x: $0.position.x + 8 * $0.xScale, y: $0.position.y + 100 * $0.yScale) } }
 
+    /// 正式美术只换场景：比武背景用画好的地区场景。人物保持原来的画法（2026-11-01 产品负责人定）。
+    var newArt = false
+
     func setFoe(robe: UIColor) {
         foe?.removeFromParent()
         let f = FigureNode(FigureArt.guardsman(robe: robe))
@@ -112,16 +115,39 @@ final class DuelScene: SKScene {
     }
 
     /// 旅程：比武背景换成这片地区长卷在这一站的局部（nil = 切片的深蓝底）。
-    func setBackdrop(regionId: String?, station: Int) {
+    func setBackdrop(regionId: String?, station: Int, boss: Bool = false) {
         backdrop = regionId.map { (RegionTheme.of($0), station) }
+        backdropBoss = boss
+        backdropRegion = regionId
         guard size.width > 0 else { return }
-        background.texture = SKTexture(image: Self.renderBackground(size: size, backdrop: backdrop))
+        background.texture = SKTexture(image: renderBackdrop())
     }
     private var backdrop: (RegionTheme, Int)?
+    private var backdropRegion: String?
+    private var backdropBoss = false
+
+    /// 有正式美术场景的地区：画好的平视背景按站点平移；否则照旧（按配色画山 / 深蓝底）。
+    private func renderBackdrop() -> UIImage {
+        if newArt, let id = backdropRegion, let scene = RegionScenes.scene(for: id), let (t, station) = backdrop {
+            let art = SceneRenderer.duel(regionId: id, scene: scene, theme: t)        // 固定尺寸画好的，按画面高度缩放
+            let format = UIGraphicsImageRendererFormat()
+            format.opaque = true
+            return UIGraphicsImageRenderer(size: size, format: format).image { _ in
+                let k = size.height / art.size.height
+                let dw = max(art.size.width * k, size.width)
+                let room = max(0, dw - size.width)
+                let pan = backdropBoss && scene.duelBossX != nil
+                    ? min(max(0, scene.duelBossX! * k - size.width / 2), room)   // 掌门站：要紧的景物（山门）在两人中间
+                    : room * CGFloat(min(station, 10)) / 10
+                art.draw(in: CGRect(x: -pan, y: 0, width: dw, height: size.height))
+            }
+        }
+        return Self.renderBackground(size: size, backdrop: backdrop)
+    }
 
     override func didChangeSize(_ oldSize: CGSize) {
         guard size.width > 0, size.height > 0 else { return }
-        background.texture = SKTexture(image: Self.renderBackground(size: size, backdrop: backdrop))
+        background.texture = SKTexture(image: renderBackdrop())
         background.size = size
         background.anchorPoint = .zero
         background.position = .zero
@@ -574,7 +600,7 @@ final class DuelScene: SKScene {
         }
     }
 
-    /// 冲击帧（参考 pixelfx 的 impacts/impact-frame，按我们的墨色和米白重画）：按 30 帧算，
+    /// 冲击帧（墨色和米白）：按 30 帧算，
     /// 前 2 帧米白底、墨色放射线从画面外冲向命中点，接 2 帧反色（墨底白线），再 4 帧线往外退出画面、淡掉，一共约 0.27 秒。
     /// 这时场景正在顿帧（速度 5%），所以在 update 里按真实时间切，不用 SKAction。
     private func impactFrame(at hit: CGPoint) {

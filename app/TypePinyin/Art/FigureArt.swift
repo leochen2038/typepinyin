@@ -10,6 +10,8 @@ enum FigureArt {
         var stroke: UIColor?
         var width: CGFloat = 0
         var cap: CGLineCap = .butt
+        /// 正式美术的暗面：在这个形状里铺一层网点（ArtStyle），不填色不描边。
+        var dots = false
     }
 
     struct Part {
@@ -23,6 +25,8 @@ enum FigureArt {
         var frontLeg: Part
         var body: Part
         var frontArm: Part
+        /// 贴图缓存的键（正式美术按外形生成；旧画法为空，每次重画）。
+        var key: String? = nil
     }
 
     static let ink = UIColor(hex: 0x111111)
@@ -82,6 +86,37 @@ enum FigureArt {
         )
     }
 
+    /// 主角赶路的样子（长卷上的小人；比武里用 `player()` 的战斗姿势）：剑背在身后，两手垂着。
+    /// step：0 = 站着，1 = 迈步（前腿往前、后腿往后），2 = 另一只脚迈步。身子和头和战斗时一样。
+    static func playerTravel(step: Int = 0, accent: UIColor = UIColor(hex: 0xE2432C)) -> Figure {
+        let fight = player(accent: accent)
+        // 两腿：站着并拢一点；迈步时一前一后，手臂反着摆
+        let (back, front, swing): (String, String, CGFloat) = switch step {
+        case 1: ("M -4 -72 Q -14 -40 -22 -4", "M 4 -72 Q 16 -40 22 -4", 1)
+        case 2: ("M -4 -72 Q 4 -40 10 -4", "M 4 -72 Q -2 -40 -8 -4", -1)
+        default: ("M -4 -72 Q -8 -40 -11 -4", "M 4 -72 Q 8 -40 11 -4", 0)
+        }
+        let footX: (String) -> CGFloat = { d in CGFloat(Double(d.split(separator: " ")[d.split(separator: " ").count - 2]) ?? 0) }
+        return Figure(
+            backArm: Part(shapes: [
+                // 背在身后的剑：剑鞘斜挎，剑柄从右肩上露出来
+                p("M -20 -80 L 20 -142", stroke: ink, width: 7, cap: .round),
+                p("M -20 -80 L 20 -142", stroke: navy, width: 3.5, cap: .round),
+                p("M 16 -136 L 25 -142", stroke: gold, width: 4, cap: .round),
+                p("M 20 -142 L 26 -152", stroke: ink, width: 4, cap: .round),
+                p("M -9 -120 Q \(-16 - 4 * swing) -106 \(-15 - 6 * swing) -92 L \(-8 - 6 * swing) -92 Q -8 -106 -3 -116 Z", fill: white),
+                circle(-12 - 6 * swing, -89, 4, fill: skin),
+            ], pivot: CGPoint(x: -10, y: -116)),
+            backLeg: Part(shapes: leg(back, foot: ellipse(footX(back) - 1, -3, 9, 4.5, fill: ink)), pivot: CGPoint(x: -4, y: -72)),
+            frontLeg: Part(shapes: leg(front, foot: ellipse(footX(front) + 2, -3, 9, 4.5, fill: ink)), pivot: CGPoint(x: 4, y: -72)),
+            body: fight.body,
+            frontArm: Part(shapes: [
+                p("M 9 -120 Q \(16 + 4 * swing) -106 \(14 + 6 * swing) -92 L \(7 + 6 * swing) -92 Q 7 -106 3 -116 Z", fill: white),
+                circle(11 + 6 * swing, -89, 4, fill: skin),
+            ], pivot: CGPoint(x: 10, y: -112))
+        )
+    }
+
     /// 镖师：斗笠、持刀，衣服用 `robe` 色。画的时候朝右，放到右边时整体水平翻转。
     static func guardsman(robe: UIColor) -> Figure {
         Figure(
@@ -116,6 +151,45 @@ enum FigureArt {
 
     // MARK: - 贴图
 
+    /// 把形状画进画布；silhouette = 全部填黑（画廊页的剪影模式），网点跳过。
+    static func draw(_ shapes: [Shape], in g: CGContext, silhouette: Bool = false) {
+        g.setLineJoin(.round)
+        for s in shapes {
+            if s.dots {
+                if !silhouette { ArtStyle.fillDots(g, path: s.path, spacing: ArtStyle.figureDotSpacing, radius: ArtStyle.figureDotRadius) }
+                continue
+            }
+            if let f = s.fill {
+                g.addPath(s.path)
+                g.setFillColor((silhouette ? ink : f).cgColor)
+                g.fillPath()
+            }
+            if let st = s.stroke, s.width > 0 {
+                g.addPath(s.path)
+                g.setStrokeColor((silhouette ? ink : st).cgColor)
+                g.setLineWidth(s.width)
+                g.setLineCap(s.cap)
+                g.strokePath()
+            }
+        }
+    }
+
+    /// 整个人站着的样子画成一张图（画廊页、长卷上的小人用）。
+    static func image(_ f: Figure, height: CGFloat, silhouette: Bool = false) -> UIImage {
+        let all = [f.backArm, f.backLeg, f.frontLeg, f.body, f.frontArm].flatMap(\.shapes)
+        var box = CGRect.null
+        for s in all { box = box.union(s.path.boundingBoxOfPath.insetBy(dx: -s.width / 2 - 2, dy: -s.width / 2 - 2)) }
+        let k = height / box.height
+        let format = UIGraphicsImageRendererFormat()
+        format.opaque = false
+        return UIGraphicsImageRenderer(size: CGSize(width: box.width * k, height: height), format: format).image { ctx in
+            let g = ctx.cgContext
+            g.scaleBy(x: k, y: k)
+            g.translateBy(x: -box.minX, y: -box.minY)
+            draw(all, in: g, silhouette: silhouette)
+        }
+    }
+
     @MainActor
     static func texture(for part: Part, scale: CGFloat = 3) -> (SKTexture, CGPoint, CGSize) {
         var box = CGRect.null
@@ -129,21 +203,7 @@ enum FigureArt {
         let img = UIGraphicsImageRenderer(size: box.size, format: format).image { ctx in
             let g = ctx.cgContext
             g.translateBy(x: -box.minX, y: -box.minY)
-            g.setLineJoin(.round)
-            for s in part.shapes {
-                if let f = s.fill {
-                    g.addPath(s.path)
-                    g.setFillColor(f.cgColor)
-                    g.fillPath()
-                }
-                if let st = s.stroke, s.width > 0 {
-                    g.addPath(s.path)
-                    g.setStrokeColor(st.cgColor)
-                    g.setLineWidth(s.width)
-                    g.setLineCap(s.cap)
-                    g.strokePath()
-                }
-            }
+            draw(part.shapes, in: g)
         }
         let anchor = CGPoint(x: (part.pivot.x - box.minX) / box.width, y: 1 - (part.pivot.y - box.minY) / box.height)
         return (SKTexture(image: img), anchor, box.size)
@@ -175,9 +235,9 @@ final class FigureNode: SKNode {
         addChild(shadow)
         addChild(pose)
         pose.addChild(rig)
-        for (node, part) in [(backArm, figure.backArm), (backLeg, figure.backLeg), (frontLeg, figure.frontLeg),
-                             (bodyPart, figure.body), (frontArm, figure.frontArm)] {
-            let (tex, anchor, size) = FigureArt.texture(for: part)
+        for (k, (node, part)) in [(backArm, figure.backArm), (backLeg, figure.backLeg), (frontLeg, figure.frontLeg),
+                                  (bodyPart, figure.body), (frontArm, figure.frontArm)].enumerated() {
+            let (tex, anchor, size) = Self.texture(part, key: figure.key.map { "\($0)#\(k)" })
             node.texture = tex
             node.size = size
             node.anchorPoint = anchor
@@ -187,6 +247,18 @@ final class FigureNode: SKNode {
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    /// 同一个外形的人第二次出场不重画贴图（正式美术的部件画得细，重画一次要几毫秒）。
+    private static var textureCache: [String: (SKTexture, CGPoint, CGSize)] = [:]
+
+    private static func texture(_ part: FigureArt.Part, key: String?) -> (SKTexture, CGPoint, CGSize) {
+        if let key, let hit = textureCache[key] { return hit }
+        let started = CACurrentMediaTime()
+        let made = FigureArt.texture(for: part)
+        if key != nil { SceneRenderer.log("人物部件", since: started) }
+        if let key { textureCache[key] = made }
+        return made
+    }
 
     private static let shadowTexture: SKTexture = {
         let size = CGSize(width: 116, height: 16)

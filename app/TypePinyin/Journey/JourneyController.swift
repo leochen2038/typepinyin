@@ -35,12 +35,16 @@ final class JourneyController {
     var stationIndex = 0
     /// 第一次进这片地区：先演镜头从掌门摇到山脚。
     var introPending = false
+    /// 新的一趟刚排好：进地区时主角从山脚（第 -1 站）走到第一站。
+    private var walkIn = false
     /// 走完这片地区（打赢掌门）或通关后随机一场打完：回到长卷上显示的小结卡片。
     var pendingCard: PendingCard?
     /// 上一站的结果：走到下一站（输了就是原地）问「挑战还是返回」时，卡片上方带一句。
     var lastResult: PendingCard?
     /// 接着走：小人从这一站走到下一站。
     var walkFrom: Int?
+    /// 调试跳站的次数：长卷画面看到它变了，就把小人和镜头摆到新的一站。
+    var debugJumpTick = 0
     /// 刚拿到的秘籍（演出用）。
     var obtained: String?
     /// 刚升重（演出用）。
@@ -53,11 +57,7 @@ final class JourneyController {
         var gains: [String]
         var won: Bool
         var finished: Bool          // 走完了这片地区（打赢掌门）
-        var replay = false          // 通关后再进的随机一场
     }
-
-    /// 这一趟是通关后再进的随机一场。
-    var isReplay: Bool { route?.stations.count == 1 && progress.regions[route?.regionId ?? ""]?.phase == .cleared }
 
     // 这次打开的收获（「收功」用）
     @ObservationIgnored var sessionStartChars = 0
@@ -103,6 +103,11 @@ final class JourneyController {
             progress = store?.load() ?? Progress()
             DayClock.resetOffset()
         }
+        let args = ProcessInfo.processInfo.arguments
+        if let k = args.firstIndex(of: "-obtain"), k + 1 < args.count {      // 开发用：-obtain all / -obtain liangzi-shang,lv
+            let list = args[k + 1] == "all" ? RankFx.order : args[k + 1].split(separator: ",").map(String.init)
+            debugObtain(list)
+        }
         learner.records = progress.records
         sessionStartChars = typedCommonChars
         screen = startScreen()
@@ -111,6 +116,7 @@ final class JourneyController {
         if ProcessInfo.processInfo.arguments.contains("-map") { screen = .map }       // 开发用：直接到江湖地图
         if ProcessInfo.processInfo.arguments.contains("-practice") { enterPractice() }   // 开发用：直接进练功房
         duel.journey = self
+        SceneRenderer.prewarm(regionIds: content.regions.map(\.id), width: UIScreen.main.bounds.width)   // 后台先把场景图画好
     }
 
     /// 一打开去哪：没打完初入江湖就接着打，没拿到《基本功》就去葫芦集，否则回江湖。
@@ -261,6 +267,7 @@ extension JourneyController {
             bank: AppResources.journeyBank, setup: setup, source: source,
             foeName: foe.name, foeTitle: foe.title, robe: UIColor(hexString: foe.look.robe), guided: guided, lifeLines: foe.lifeLines ?? [],
             backdrop: backdrop,
+            backdropBoss: boss,
             onEvent: { [weak self] e in self?.handleTipEvent(e) },
             onFinish: { [weak self] summary, attempts, spl in
                 guard let self else { return }
@@ -414,7 +421,8 @@ extension JourneyController {
         return nil
     }
 
-    /// 进一片地区：挑战中就接着走，否则排一条新路线（再去一趟也是新路线）。
+    /// 进一片地区：这一趟没走完就接着走（第一次挑战和通关后再去一趟都一样记进度），否则从头排一条新路线。
+    /// 通关后再去一趟是完整的一趟（2026-11-01 改，原来是随机一场），打赢掌门不再给秘籍。
     func enterRegion(_ id: String) {
         guard let region = content.region(id) else { return }
         if progress.journey.lastRegion != id {                // 地图上最近一次挑战的岛（红边圆章、一圈光）
@@ -425,35 +433,56 @@ extension JourneyController {
             save(ch)
         }
         let state = progress.regions[id]
-        if let s = state, s.phase == .inProgress, let data = s.route,
-           let r = try? JSONDecoder().decode(Route.self, from: data), s.stationIndex < r.stations.count {
+        if let s = state, s.phase != .untouched, let data = s.route,
+           let r = try? JSONDecoder().decode(Route.self, from: data), r.stations.count > 1, s.stationIndex < r.stations.count {
             route = r
             stationIndex = s.stationIndex
             introPending = false
-        } else if state?.phase == .cleared {
-            // 通关以后再进：不走地图，随机来一场掌门、奇遇、单挑或群战
-            route = RoutePlanner.replay(region: region, content: content, seed: UInt64(Date().timeIntervalSince1970 * 1000) & 0xFFFF_FFFF)
-            stationIndex = 0
-            introPending = false
         } else {
-            let r = RoutePlanner.plan(region: region, content: content, seed: UInt64(Date().timeIntervalSince1970 * 1000) & 0xFFFF_FFFF)
-            route = r
+            let cleared = state?.phase == .cleared
+            route = RoutePlanner.plan(region: region, content: content, seed: UInt64(Date().timeIntervalSince1970 * 1000) & 0xFFFF_FFFF)
             stationIndex = 0
-            introPending = true
-            saveRegion(id, phase: .inProgress)
+            introPending = !cleared                            // 镜头从掌门摇到山脚、地名横幅：只在第一次
+            saveRegion(id, phase: cleared ? .cleared : .inProgress)
+            walkIn = true                                      // 新的一趟：主角从山脚走到第一站
         }
         pendingCard = nil
         lastResult = nil
-        walkFrom = nil
+        walkFrom = walkIn ? -1 : nil
+        walkIn = false
         obtained = nil
         regionStage = .scroll
         screen = .region(id)
         markMapGuideSeen()
     }
 
-    func saveRegion(_ id: String, phase: RegionPhase) {
+    /// 地图卡片的「从头开始」：丢掉这一趟的路线和走到的站，重新排一条，从第一站走（通关状态、秘籍、词卡不动）。
+    func restartRegion(_ id: String) {
+        if let s = progress.regions[id] {
+            var ch = ProgressChange()
+            ch.regions[id] = RegionState(phase: s.phase, stationIndex: 0, route: nil)
+            save(ch)
+        }
+        enterRegion(id)
+    }
+
+    /// 调试（调参面板）：直接跳到这一趟长卷的第 i 站，站前照常问挑战。进度会存下来。
+    func debugJump(to i: Int) {
+        guard let id = currentRegion?.id, let r = route, r.stations.indices.contains(i) else { return }
+        pendingCard = nil
+        lastResult = nil
+        walkFrom = nil
+        introPending = false
+        stationIndex = i
+        saveRegion(id, phase: progress.regions[id]?.phase ?? .inProgress)
+        debugJumpTick += 1
+    }
+
+    /// 存这一趟的进度；keepRoute = false 表示这一趟走完了，下次进来从头排新路线。
+    func saveRegion(_ id: String, phase: RegionPhase, keepRoute: Bool = true) {
         var ch = ProgressChange()
-        ch.regions[id] = RegionState(phase: phase, stationIndex: stationIndex, route: route.flatMap { try? JSONEncoder().encode($0) })
+        ch.regions[id] = RegionState(phase: phase, stationIndex: keepRoute ? stationIndex : 0,
+                                     route: keepRoute ? route.flatMap { try? JSONEncoder().encode($0) } : nil)
         save(ch)
     }
 
@@ -510,11 +539,6 @@ extension JourneyController {
     /// 奇遇的「接着走」。
     func leaveEncounter() {
         guard let region = currentRegion else { return }
-        if isReplay {
-            pendingCard = PendingCard(summary: nil, title: "奇遇打完了", gains: [], won: true, finished: true, replay: true)
-            regionStage = .scroll
-            return
-        }
         stationIndex += 1
         saveRegion(region.id, phase: progress.regions[region.id]?.phase == .cleared ? .cleared : .inProgress)
         lastResult = PendingCard(summary: nil, title: "奇遇打完了", gains: [], won: true, finished: false)
@@ -525,14 +549,6 @@ extension JourneyController {
     /// 一站比武打完：赢了往前走一站（掌门打赢就拿到这一卷），输了重打这一站。
     func stationDone(won: Bool, summary: DuelSummary, change: LearnerChange) {
         guard let region = currentRegion, let st = currentStation else { return }
-        if isReplay {                                          // 随机一场：打完可以再来一场或回江湖，不动地图进度
-            checkRankUps()
-            pendingCard = PendingCard(summary: summary, title: won ? "打赢了\(st.foe?.name ?? "")" : "再来一次",
-                                      gains: gains(change), won: won, finished: won, replay: true)
-            regionStage = .scroll
-            autoAdvance { j in j.screen = .map }
-            return
-        }
         var finished = false
         if won {
             stationIndex += 1
@@ -540,7 +556,7 @@ extension JourneyController {
                 finished = true
                 let firstClear = progress.regions[region.id]?.phase != .cleared
                 stationIndex = 0
-                saveRegion(region.id, phase: .cleared)
+                saveRegion(region.id, phase: .cleared, keepRoute: false)   // 这一趟走完了，再去一趟从头开始
                 if firstClear { obtainVolume(region.volume) }
             } else {
                 saveRegion(region.id, phase: progress.regions[region.id]?.phase == .cleared ? .cleared : .inProgress)
@@ -585,6 +601,25 @@ extension JourneyController {
         obtained = v
     }
 
+    /// 开发用（调参「标为拿到」、启动参数 -obtain）：把这几卷标为拿到，对应的地区算打通，不演出。
+    /// 顺带当作梦打完、云雾散过、看过地图引导，好直接看地图。
+    func debugObtain(_ volumes: [String]) {
+        var ch = ProgressChange()
+        var jn = progress.journey
+        jn.openingDone = true
+        jn.fogCleared = true
+        jn.tipsSeen.insert(Self.mapGuideKey)
+        ch.journey = jn
+        for v in volumes where RankFx.order.contains(v) {
+            let r = CardRank.rank(of: v, obtained: true, previous: progress.volumes[v]?.rank ?? 0, best: cardBest, content: content)
+            ch.volumes[v] = VolumeState(obtained: true, rank: max(1, r))
+            for region in content.regions where region.volume == v {
+                ch.regions[region.id] = RegionState(phase: .cleared, stationIndex: 0, route: nil)
+            }
+        }
+        save(ch)
+    }
+
     /// 已拿到的卷，词卡够了就升重。
     func checkRankUps() {
         let best = cardBest
@@ -605,7 +640,6 @@ extension JourneyController {
         guard let card = pendingCard else { return }
         pendingCard = nil
         if !card.won { enterStation(); return }               // 再来一次：重打这一站
-        if card.replay, let id = route?.regionId { enterRegion(id); return }   // 随机一场：再来一场
         if card.finished { screen = .map; return }            // 走完了：回江湖
         walkFrom = stationIndex - 1
     }

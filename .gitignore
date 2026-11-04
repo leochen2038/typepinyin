@@ -19,3 +19,6 @@ __pycache__/
 .vscode/
 .idea/
 .playwright-mcp/
+
+# 美术参考原图（不进仓库）
+art-src/

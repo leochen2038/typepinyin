@@ -2,7 +2,7 @@ import LearningCore
 import SwiftUI
 
 /// 一片地区的竖长卷（简化版）：山路从山脚画到掌门所在的地方，站牌立在路边，小人站在当前一站。
-/// 用粗墨线、平涂撞色画；景物按地区换（葫芦集：葫芦架、大石、古树；半山镇：石阶、山门、茶林）。
+/// 用粗墨线、平涂撞色画；景物按地区换（葫芦集：葫芦架、大石、古树；半山镇：石阶、山门、竹林）。
 struct RegionScrollView: View {
     let region: Region
     let route: Route
@@ -11,15 +11,30 @@ struct RegionScrollView: View {
     /// 小人的位置（可以是两站之间的小数，走路时用）。
     let hero: Double
     let width: CGFloat
+    /// 正式美术的场景：有就用画好的长卷图、站点沿弯路排；nil = 旧画法。
+    var scene: RegionScene? = nil
+    /// 小人正在走（换走路的帧）。
+    var walking = false
 
-    static let height: CGFloat = 1500
+    static let height: CGFloat = SceneRenderer.scrollHeight
     var theme: RegionTheme { RegionTheme.of(region.id) }
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// 第 i 站在长卷上的位置：从下往上，左右交错。
+    /// 第 i 站在长卷上的位置：有正式美术场景时沿弯路等距；否则从下往上、左右交错。
+    static func point(_ i: Double, count: Int, width: CGFloat, scene: RegionScene?) -> CGPoint {
+        if let scene { return SceneRenderer.station(i, count: count, scene: scene, width: width) }
+        return point(i, count: count, width: width)
+    }
+
     static func point(_ i: Double, count: Int, width: CGFloat) -> CGPoint {
+        if i < 0 {                                                 // 从山脚走到第一站
+            let a = CGPoint(x: width * 0.5, y: SceneRenderer.startY), b = point(0, count: count, width: width)
+            let f = CGFloat(1 + max(i, -1))
+            return CGPoint(x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f)
+        }
         let n = Double(max(1, count - 1))
         let k = min(max(i, 0), n)
-        let y = height - 170 - (height - 400) * CGFloat(k / n)
+        let y = SceneRenderer.firstStationY - (SceneRenderer.firstStationY - 230) * CGFloat(k / n)   // 第一站下面留一段山脚的路
         let lo = Int(k.rounded(.down)), hi = min(Int(k.rounded(.up)), count - 1)
         func x(_ j: Int) -> CGFloat { j == count - 1 ? 0.5 : (j % 2 == 0 ? 0.3 : 0.7) }
         let f = CGFloat(k - Double(lo))
@@ -28,21 +43,30 @@ struct RegionScrollView: View {
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            Canvas { ctx, size in draw(ctx, size: size) }
-                .frame(width: width, height: Self.height)
+            if let scene {
+                Image(uiImage: SceneRenderer.scroll(regionId: region.id, scene: scene, theme: theme, width: width))
+                    .frame(width: width, height: Self.height)
+                if let mist = SceneRenderer.mist(regionId: region.id, scene: scene, width: width) {
+                    MistLayer(image: mist, drift: !reduceMotion)
+                        .frame(width: width, height: Self.height)
+                }
+            } else {
+                Canvas { ctx, size in draw(ctx, size: size) }
+                    .frame(width: width, height: Self.height)
+            }
             ForEach(Array(route.stations.enumerated()), id: \.offset) { i, st in
                 sign(i, st)
                     .position(signPoint(i))
             }
-            HeroMarker()
-                .position(Self.point(hero, count: route.stations.count, width: width).applying(.init(translationX: 0, y: -26)))
+            HeroMarker(walking: walking)
+                .modifier(OnRoad(t: hero, at: { Self.point($0, count: route.stations.count, width: width, scene: scene) }))
         }
         .frame(width: width, height: Self.height)
     }
 
     func signPoint(_ i: Int) -> CGPoint {
-        let p = Self.point(Double(i), count: route.stations.count, width: width)
-        let side: CGFloat = i == route.stations.count - 1 ? 0 : (i % 2 == 0 ? -58 : 58)
+        let p = Self.point(Double(i), count: route.stations.count, width: width, scene: scene)
+        let side: CGFloat = scene != nil || i == route.stations.count - 1 ? 0 : (i % 2 == 0 ? -58 : 58)   // 新画法站牌就在路上
         return CGPoint(x: p.x + side, y: p.y - (i == route.stations.count - 1 ? 70 : 8))
     }
 
@@ -84,7 +108,7 @@ struct RegionScrollView: View {
         ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(t.color(t.sky)))
         var rng = SplitMix64(seed: UInt64(region.id.unicodeScalars.reduce(7) { ($0 &* 31 &+ Int($1.value)) & 0xFFFFFF }))
         // 远山：一层层往上叠
-        for band in 0..<5 {
+        for band in 0..<Int(h / 300) {
             let base = h - CGFloat(band) * 300 - 120
             var p = Path()
             p.move(to: CGPoint(x: 0, y: base + 200))
@@ -113,7 +137,7 @@ struct RegionScrollView: View {
             ctx.stroke(road, with: .color(Palette.ink.opacity(0.4)), style: StrokeStyle(lineWidth: 24, dash: [2, 12]))
         }
         // 景物
-        for k in 0..<14 {
+        for k in 0..<Int((h - 120) / 95) {
             let y = h - 120 - CGFloat(k) * 95
             let left = k % 2 == 0
             let x = left ? CGFloat(rng.next() % 50) + 20 : w - CGFloat(rng.next() % 50) - 30
@@ -214,18 +238,117 @@ struct RegionScrollView: View {
     }
 }
 
-/// 长卷上的小人：圆头、白衣、红腰带（和比武里的主角一个样子）。
+/// 长卷上的雾和阳光：比长卷左右各宽 mistPad 的一张透明图，用 Core Animation 左右慢慢飘
+/// （16 秒一趟、来回，动画在渲染进程里跑，不占主线程）；减弱动态效果时不动。
+struct MistLayer: UIViewRepresentable {
+    let image: UIImage
+    let drift: Bool
+
+    func makeUIView(context: Context) -> UIView {
+        let host = UIView()
+        host.isUserInteractionEnabled = false
+        let iv = UIImageView(image: image)
+        iv.frame = CGRect(x: -SceneRenderer.mistPad, y: 0, width: image.size.width, height: image.size.height)
+        host.addSubview(iv)
+        if drift {
+            let a = CABasicAnimation(keyPath: "transform.translation.x")
+            a.fromValue = -10
+            a.toValue = 10
+            a.duration = 16
+            a.autoreverses = true
+            a.repeatCount = .infinity
+            a.isRemovedOnCompletion = false                                 // 切到后台再回来还接着飘
+            a.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            iv.layer.add(a, forKey: "drift")
+        }
+        return host
+    }
+
+    func updateUIView(_ host: UIView, context: Context) {
+        (host.subviews.first as? UIImageView)?.image = image
+    }
+}
+
+/// 小人沿路走：动画按「第几站」插值，每一帧重新算路上的位置，所以沿弯路走而不是走直线。
+struct OnRoad: ViewModifier, @preconcurrency Animatable {
+    var t: Double
+    let at: (Double) -> CGPoint
+    var animatableData: Double {
+        get { t }
+        set { t = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        let p = at(t)
+        let ahead = at(t + 0.02)                                  // 往左走就朝左
+        content
+            .scaleEffect(x: ahead.x < p.x - 0.05 ? -1 : 1, y: 1)
+            .position(p.applying(.init(translationX: 0, y: -26)))
+    }
+}
+
+/// 长卷上的小人：主角赶路的样子（剑背在身后）；比武里才是战斗姿势。
 struct HeroMarker: View {
+    var walking = false
+    static let height: CGFloat = 52
+
     var body: some View {
-        VStack(spacing: -2) {
-            Circle().fill(Color(hex: 0xFFE2C2)).overlay(Circle().stroke(Palette.ink, lineWidth: 2.5)).frame(width: 18, height: 18)
-            ZStack(alignment: .center) {
-                RoundedRectangle(cornerRadius: 3).fill(.white).overlay(RoundedRectangle(cornerRadius: 3).stroke(Palette.ink, lineWidth: 2.5))
-                Rectangle().fill(Palette.red).frame(height: 4)
+        Group {
+            if walking {
+                TimelineView(.animation) { tl in
+                    WalkingHero(t: tl.date.timeIntervalSinceReferenceDate)
+                }
+            } else {
+                WalkingHero(t: 0)                                  // 站着：摆角为 0，和走路时同一套画法，切换时不跳
             }
-            .frame(width: 20, height: 24)
         }
         .accessibilityHidden(true)
+    }
+}
+
+// Motion Prompt #029 · MIT License (c) 2026 Shohei Ohtaki · https://showheyohtaki.github.io/motion-prompt/#029
+/// 走路的主角：照跟拍（#029）里走路的人，腿和手按正弦前后摆、手和腿反着摆，每迈一步身子往上一点（脚着地时最低）。
+/// 原版摆幅 0.42 弧度、sin(t×7)；试玩觉得步子太大，改成小步：摆幅 0.22、sin(t×8)。部件绕各自的关节转，画法和站着时一样。
+struct WalkingHero: View {
+    let t: Double
+    @MainActor static let figure = FigureArt.playerTravel()
+    @MainActor static let box: CGRect = {
+        let f = figure
+        var b = CGRect.null
+        for s in [f.backArm, f.backLeg, f.frontLeg, f.body, f.frontArm].flatMap(\.shapes) {
+            b = b.union(s.path.boundingBoxOfPath.insetBy(dx: -s.width / 2 - 2, dy: -s.width / 2 - 2))
+        }
+        return b.insetBy(dx: -8, dy: -4)                        // 腿摆开、身子上下时留点边
+    }()
+
+    var body: some View {
+        let f = Self.figure, box = Self.box
+        let k = HeroMarker.height / box.height
+        let swing = sin(t * 8) * 0.22
+        let bob = -abs(sin(t * 8)) * 1.4                           // 两腿分开时身子最高
+        Canvas { ctx, _ in
+            ctx.scaleBy(x: k, y: k)
+            ctx.translateBy(x: -box.minX, y: -box.minY)
+            func draw(_ part: FigureArt.Part, angle: Double, lift: CGFloat) {
+                var c = ctx
+                c.translateBy(x: part.pivot.x, y: part.pivot.y + lift)
+                c.rotate(by: .radians(angle))
+                c.translateBy(x: -part.pivot.x, y: -part.pivot.y)
+                for s in part.shapes {
+                    let path = Path(s.path)
+                    if let fill = s.fill { c.fill(path, with: .color(Color(uiColor: fill))) }
+                    if let st = s.stroke, s.width > 0 {
+                        c.stroke(path, with: .color(Color(uiColor: st)), style: StrokeStyle(lineWidth: s.width, lineCap: s.cap, lineJoin: .round))
+                    }
+                }
+            }
+            draw(f.backArm, angle: swing * 0.6, lift: bob)
+            draw(f.backLeg, angle: swing, lift: bob)
+            draw(f.frontLeg, angle: -swing, lift: bob)
+            draw(f.body, angle: 0, lift: bob)
+            draw(f.frontArm, angle: -swing * 0.6, lift: bob)
+        }
+        .frame(width: box.width * k, height: HeroMarker.height)
     }
 }
 

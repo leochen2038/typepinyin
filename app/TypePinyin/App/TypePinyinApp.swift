@@ -16,6 +16,11 @@ struct TypePinyinApp: App {
         WindowGroup {
             if ProcessInfo.processInfo.arguments.contains("-keyboardProbe") {
                 KeyboardProbeView()
+            } else if ProcessInfo.processInfo.arguments.contains("-scrollPerf") {
+                ScrollPerfView(content: AppResources.content)      // 开发用：真机测长卷
+            } else if ProcessInfo.processInfo.arguments.contains("-artGallery") {
+                ArtGalleryView(content: AppResources.content)      // 开发用：正式美术画廊页
+                    .preferredColorScheme(.light)
             } else if controller.tuning.textMode == 3 && (!AppResources.isUITest || ProcessInfo.processInfo.arguments.contains("-fastJourney")) {
                 JourneyRoot(j: journey)                 // 旅程（默认）：初入江湖、地区、总地图
                     .preferredColorScheme(.light)

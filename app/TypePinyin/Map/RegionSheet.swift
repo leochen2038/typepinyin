@@ -12,6 +12,9 @@ struct RegionSheet: View {
     var total = 0
     let onGo: () -> Void
     let onClose: () -> Void
+    /// 这一趟走到一半时的「从头开始」：丢掉这一趟的进度，从第一站重新走（秘籍、词卡、重数不受影响）。
+    var onRestart: (() -> Void)? = nil
+    @State private var confirmRestart = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -47,6 +50,20 @@ struct RegionSheet: View {
             .buttonStyle(.plain)
             .disabled(!region.playable)
             .accessibilityIdentifier("regionGo")
+            if stationLine != nil, let onRestart {
+                Button { confirmRestart = true } label: {
+                    Text("从头开始").font(.system(size: 15, weight: .bold)).foregroundStyle(Palette.slate)
+                        .frame(maxWidth: .infinity).frame(height: 30)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("regionRestart")
+                .confirmationDialog("这一趟从第一站重新走？", isPresented: $confirmRestart, titleVisibility: .visible) {
+                    Button("从头开始", action: onRestart)
+                    Button("接着走", role: .cancel) {}
+                } message: {
+                    Text("秘籍和收过的词卡都留着。")
+                }
+            }
         }
         .padding(18)
         .background(Color.white)
@@ -62,6 +79,7 @@ struct RegionSheet: View {
 
     var buttonText: String {
         guard region.playable else { return "还在修路" }
+        if stationLine != nil { return "接着走" }              // 这一趟没走完（通关后再去一趟也一样）
         switch phase {
         case .inProgress: return "接着走"
         case .cleared: return "再去一趟"

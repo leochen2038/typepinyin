@@ -2,7 +2,7 @@ import Testing
 @testable import LearningCore
 
 /// 一趟路：8–10 战（第一关固定 5 战：单挑、3 人群战、单挑、5 人群战、掌门），倒数第二站一定是群战，最后是掌门；
-/// 第一关没有奇遇；别的地区 1–2 场奇遇。通关后再进：随机一场（第一关不出奇遇）。
+/// 第一关没有奇遇；别的地区 1–2 场奇遇。通关后再去一趟也是这样完整的一趟（2026-11-01 起，原来是随机一场）。
 @Suite struct RouteTests {
     let c = TestContent.shared
 
@@ -44,22 +44,5 @@ import Testing
         let best = RoutePlanner.encounterCandidates(region: region, content: c)
         let counts = best.map { e in e.syllables.filter { c.volume(of: $0) == region.volume }.count }
         #expect(counts == counts.sorted(by: >))
-    }
-
-    /// 通关后再进：不走地图，随机来一场掌门、奇遇、单挑或群战。
-    @Test func replayIsOneRandomStation() {
-        let region = c.region("banshanzhen")!
-        var kinds = Set<Station.Kind>()
-        for seed in 1...60 as ClosedRange<UInt64> {
-            let r = RoutePlanner.replay(region: region, content: c, seed: seed)
-            #expect(r.stations.count == 1)
-            kinds.insert(r.stations[0].kind)
-        }
-        #expect(kinds == [.boss, .encounter, .duel, .group])
-        var first = Set<Station.Kind>()
-        for seed in 1...60 as ClosedRange<UInt64> {
-            first.insert(RoutePlanner.replay(region: c.region("huluji")!, content: c, seed: seed).stations[0].kind)
-        }
-        #expect(first == [.boss, .duel, .group])
     }
 }

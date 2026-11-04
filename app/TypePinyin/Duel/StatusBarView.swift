@@ -74,7 +74,7 @@ struct SkewBar: View {
     var fromTrailing = false
     var track: Color = .white
     var anim: Double = 0.25
-    /// 血条受击（参考 pixelfx 的 ui/health-bar-hit）：掉血时血条马上落到新值、整条往下一顿，
+    /// 血条受击：掉血时血条马上落到新值、整条往下一顿，
     /// 掉的那一截是血条自己颜色的浅色：先亮一下、再稍深一点停 0.42 秒，然后用 0.43 秒缩回去。连着几刀掉血时，等最后一刀之后才缩。
     /// （先试过闪白，掌门多条命时白色夹在本色和下一条命的颜色中间，看着像血条空了一块。）
     var hitTrail = false

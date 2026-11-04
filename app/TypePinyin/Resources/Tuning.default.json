@@ -44,6 +44,8 @@
  "bossHit": 8,
  "textMode": 3,
  "textStyle": 2,
+ "textCharHit": true,
+ "artStyle": 1,
  "heavyLetters": 10,
  "mediumLetters": 7,
  "replayOffsets": [

@@ -25,7 +25,7 @@ struct RegionTopBar: View {
             .overlay(PanelGesture { j.showPanel = true })
             Spacer()
             let n = route.stations.count
-            Text(j.isReplay ? "再来一场" : "第 \(min(j.stationIndex + 1, n)) 站 · 还剩 \(max(0, n - j.stationIndex - 1)) 站")
+            Text("第 \(min(j.stationIndex + 1, n)) 站 · 还剩 \(max(0, n - j.stationIndex - 1)) 站")
                 .font(.system(size: 13, weight: .bold)).foregroundStyle(Palette.ink)
             ZStack {
                 Circle().stroke(Palette.mist2, lineWidth: 5)

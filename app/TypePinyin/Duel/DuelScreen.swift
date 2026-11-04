@@ -232,7 +232,7 @@ struct NearMissLayer: View {
 
 // Motion Prompt #014 #003 · MIT License (c) 2026 Shohei Ohtaki · https://showheyohtaki.github.io/motion-prompt/#014
 /// 送气，三段：
-/// 1. 聚气（参考 pixelfx 的 projectiles/magic-missile）：0.14 秒里一圈光点从四周旋进气条末端，聚成一团朱红气团；
+/// 1. 聚气：0.14 秒里一圈光点从四周旋进气条末端，聚成一团朱红气团；
 /// 2. 飞（拖尾参考 Motion Prompt #014 モーショントレイル）：气团沿弧线飞到必杀牌上，身后 15 个残影按固定时间差排开，
 ///    越旧越小越淡（半径按气团大小从原版 22→6 换算，透明度 0.9·(1 − i/15) + 0.05），颜色由新到旧朱红 → 米白 → 墨（原版珊瑚 → 黄 → 蓝）；
 /// 3. 落（参考 Motion Prompt #003 バースト）：朱红圈半径 44→90、线宽 16→0 用 0.6 秒外扩（easeOut 5 次），

@@ -238,6 +238,8 @@ final class DuelController {
         var lifeLines: [String] = []
         /// 比武背景用哪片地区的长卷、第几站（nil = 切片的深蓝底）。
         var backdrop: (region: String, station: Int)?
+        /// 这一场是掌门站（比武背景停在掌门的位置）。
+        var backdropBoss = false
         /// 引擎事件（入门提示用）。
         var onEvent: ((DuelEvent) -> Void)?
         /// 打完、小结出来之前：交回结果，旅程据此填小结卡片的收获和按钮。
@@ -326,8 +328,9 @@ final class DuelController {
         tip = nil
         sounds.hapticsOn = true
         scene.groupEnd()                          // 先换回单挑的对手，再换衣服
+        scene.newArt = tuning.artStyle == 1
         scene.setFoe(robe: plan?.robe ?? robes[round % robes.count])
-        scene.setBackdrop(regionId: plan?.backdrop?.region, station: plan?.backdrop?.station ?? 0)
+        scene.setBackdrop(regionId: plan?.backdrop?.region, station: plan?.backdrop?.station ?? 0, boss: plan?.backdropBoss ?? false)
         scene.speed = 1 / Self.fxSlow            // -slowfx：人物动作也一起放慢
         scene.reset()
         scene.groupFinisherStyle = tuning.groupFinisherStyle

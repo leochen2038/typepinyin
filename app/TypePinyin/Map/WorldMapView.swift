@@ -2,7 +2,7 @@ import LearningCore
 import ProgressStore
 import SwiftUI
 
-/// 江湖总地图（云海群岛）：云顶是武林大会和十方印（集齐十卷开放）；中间九座浮岛排成 3×3，一行一本秘籍，
+/// 江湖总地图（云海群岛）：云顶是武林大会和十方印（拿到一卷盖一个，点开是武林大会的小卡片）；中间九座浮岛排成 3×3，一行一本秘籍，
 /// 上卷在左、下卷在右、只有一卷的书在中间；最下面是起点葫芦集；右下角的圆印是练功房（固定，不随地图动）。
 /// 九座岛一直是彩色的：圆章拿到这卷秘籍画主题粒子，没拿到画灰问号；最后进去过的地区圆章红边、岛有一圈光。
 /// 去过的岛右上方漂「N 张」（这一卷收了几张词卡）：还在路上是交叉的剑，拿到秘籍是红色秘籍印。岛下只写地名。
@@ -12,6 +12,7 @@ struct WorldMapView: View {
     /// 弹窗里放的是哪片地区（关上后也留着，卡片停在屏幕外，下次只是移上来，不用重新插进画面）。
     @State private var sheetId: String?
     @State private var sheetUp = false
+    @State private var gathering = false
     @State private var fogClearing = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -65,10 +66,15 @@ struct WorldMapView: View {
                 if let id = sheetId, let r = j.content.region(id) {
                     RegionSheet(region: r, phase: phase(id), stationLine: stationLine(id),
                                 cards: j.cardCount(in: r.volume), total: j.cardTotal(in: r.volume),
-                                onGo: { closeSheet(); j.inkTransition { j.enterRegion(id) } }, onClose: { closeSheet() })
+                                onGo: { closeSheet(); j.inkTransition { j.enterRegion(id) } }, onClose: { closeSheet() },
+                                onRestart: { closeSheet(); j.inkTransition { j.restartRegion(id) } })
                         .offset(y: sheetUp ? 0 : g.size.height * 0.7)
                         .allowsHitTesting(sheetUp)
                         .accessibilityHidden(!sheetUp)
+                }
+                if gathering {
+                    GatheringCard(all: gotCount == Self.sealOrder.count) { withAnimation(.easeIn(duration: 0.2)) { gathering = false } }
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
         }
@@ -127,10 +133,17 @@ struct WorldMapView: View {
             .accessibilityIdentifier("place-\(r.id)")
     }
 
-    /// 云顶：武林大会，下面十方印（拿到一卷盖一个）。
+    /// 十方印的顺序。
+    static let sealOrder = ["huluji", "baimeitai", "chaotoudao", "banshanzhen", "changfengcheng", "yueyawan", "chuiliucun", "lvquanju", "xiaoqiaoxiang", "huanghuaguan"]
+
+    func sealed(_ id: String) -> Bool { j.content.region(id).map { j.progress.volumes[$0.volume]?.obtained == true } ?? false }
+
+    var gotCount: Int { Self.sealOrder.filter(sealed).count }
+
+    /// 云顶：武林大会，下面十方印（拿到一卷盖一个）；点开弹武林大会的小卡片。
     var peak: some View {
-        let order = ["huluji", "baimeitai", "chaotoudao", "banshanzhen", "changfengcheng", "yueyawan", "chuiliucun", "lvquanju", "xiaoqiaoxiang", "huanghuaguan"]
-        let got = order.filter { id in j.content.region(id).map { j.progress.volumes[$0.volume]?.obtained == true } ?? false }
+        let order = Self.sealOrder
+        let got = order.filter(sealed)
         return VStack(spacing: 3) {
             PeakArt(open: got.count == order.count).frame(width: 170, height: 78)
             Text("武林大会").font(Fonts.display(22))
@@ -145,10 +158,13 @@ struct WorldMapView: View {
                         .rotationEffect(.degrees(on ? -4 : 0))
                 }
             }
-            Text(got.count == order.count ? "十卷集齐 · 武林大会开放" : "已集 \(got.count) 卷 · 集齐十卷开放")
+            Text(got.count == order.count ? "十卷集齐" : "已集 \(got.count) 卷 · 集齐十卷开放")
                 .font(.system(size: 12, weight: .bold)).foregroundStyle(got.count == order.count ? Palette.red : Palette.slate)
         }
+        .contentShape(Rectangle())
+        .onTapGesture { closeSheet(); withAnimation(Self.sheetSpring) { gathering = true } }
         .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier("place-wuLinDaHui")
     }
 
@@ -190,9 +206,10 @@ struct WorldMapView: View {
 
     static let sheetSpring = Animation.spring(duration: 0.32, bounce: 0.12)
 
+    /// 这一趟走到哪了：第一次挑战中，或通关后再去一趟走了一半（已经打过至少一站）。
     func stationLine(_ id: String) -> String? {
-        guard j.progress.regions[id]?.phase == .inProgress, let s = j.progress.regions[id],
-              let data = s.route, let r = try? JSONDecoder().decode(Route.self, from: data) else { return nil }
+        guard let s = j.progress.regions[id], s.phase == .inProgress || s.stationIndex > 0,
+              let data = s.route, let r = try? JSONDecoder().decode(Route.self, from: data), r.stations.count > 1 else { return nil }
         return "走到第 \(s.stationIndex + 1) 站，再走 \(max(0, r.stations.count - s.stationIndex - 1)) 站到掌门"
     }
 

@@ -1,10 +1,12 @@
 import LearningCore
 import SwiftUI
 
-/// 「拿到秘籍」演出：书卷展开，卷名，这一卷到了第几重。
+/// 「拿到秘籍」演出：掌门被打赢的话（有就显示），书卷展开，卷名，这一卷到了第几重。
 struct ObtainVolumeView: View {
     let volume: String
     let rank: Int
+    /// 掌门的名字和被打赢的话；没有就不显示。
+    var boss: (name: String, line: String)? = nil
     let onDone: () -> Void
     @State private var open = false
 
@@ -12,6 +14,15 @@ struct ObtainVolumeView: View {
         ZStack {
             Color.black.opacity(0.5).ignoresSafeArea()
             VStack(spacing: 14) {
+                if let boss {
+                    VStack(spacing: 4) {
+                        Text(boss.name).font(.system(size: 14, weight: .bold)).foregroundStyle(Palette.gold)
+                        Text("「\(boss.line)」").font(.system(size: 17, weight: .semibold)).foregroundStyle(.white)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding(.horizontal, 32).padding(.bottom, 8)
+                    .accessibilityIdentifier("bossDefeatLine")
+                }
                 Text("拿到秘籍").font(.system(size: 18, weight: .black)).foregroundStyle(Palette.gold)
                 Text("《\(Volumes.name(volume))》").font(Fonts.display(40)).foregroundStyle(Palette.ink)
                     .padding(.horizontal, 26).padding(.vertical, 14)

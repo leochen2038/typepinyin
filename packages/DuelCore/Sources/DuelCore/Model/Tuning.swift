@@ -67,6 +67,10 @@ public struct Tuning: Codable, Sendable, Equatable {
     /// 试玩：打文字时的动效。0 = 简版（打完一句半秒快爆），1 = 战斗动效 + 回顾（打完一句翻回顾牌、逐个字母爆开），
     /// 2 = 战斗动效、不要回顾（下划线、打完一个字变红迸粒子，打完一句马上下一句；默认）。
     public var textStyle: Int = 2
+    /// 打文字时每打完一个字都来一声命中、震一下（和一句的最后一个字一样）；关掉就只有最后一个字有。
+    public var textCharHit: Bool = true
+    /// 场景的画法：0 = 旧画法（几道山形），1 = 正式美术。没换成新画法的地区自动用旧画法。人物不受影响。
+    public var artStyle: Int = 1
     public var groupSize: Int = 3
     public var groupTotal: Int = 5
     public var heavyLetters: Int = 10
@@ -90,9 +94,9 @@ public struct Tuning: Codable, Sendable, Equatable {
     public var pressureFactor: Double = 2.4
     public var pressureBaseSeconds: Double = 1.5
     public var pressureMinSeconds: Double = 3.0
-    /// 试看：秘籍重数的爆字母效果。-1 = 关（默认彩纸），0–5 = 所有字母按这一重来爆（切片里还没有真的重数）。
+    /// 爆字母的特效：-1 = 按玩家拿到的秘籍和练到的重数（默认）；0–5 = 所有字母按这一重来爆（调参面板「按玩家的秘籍和重数」关掉时）。
     public var rankFx: Int = -1
-    /// 试看：爆字母的主题。空 = 每个字母按它所在音节属于哪一卷，填卷名（如 liangzi-shang）= 全部用这一卷。
+    /// 指定重数时爆字母的主题。空 = 每个字母按它所在音节属于哪一卷，填卷名（如 liangzi-shang）= 全部用这一卷。
     public var rankFxTheme: String = ""
     /// 画面：状态栏下面那排每招一个的小圆点（最近 10 招金不金、哪招是必杀）。
     public var moveDots: Bool = true
@@ -121,7 +125,7 @@ public struct Tuning: Codable, Sendable, Equatable {
         case qiPerStrikeBase, qiPerStrikeMax, qiParry, qiBlock, finisherBase, finisherComboBonus
         case heavyLetters, mediumLetters, replayOffsets, commitOnRelease
         case expectedKeyGrowPt, nearMissMaxPt, hapticsOnKey, comboGoldAt, comboRedAt, movesPerDuel, goldSecondsPerLetter, hintSeconds
-        case cardsOnTable, pressureFactor, pressureBaseSeconds, pressureMinSeconds, grabStyle, handZones, slashMinGap, grabMode, qiBar, moveDots, rankFx, rankFxTheme, finisherShare, perfectQi, qiMultiplier, anticipation, finisherFreeze, groupFight, groupFinisherStyle, groupSize, groupTotal, textMode, textStyle
+        case cardsOnTable, pressureFactor, pressureBaseSeconds, pressureMinSeconds, grabStyle, handZones, slashMinGap, grabMode, qiBar, moveDots, rankFx, rankFxTheme, finisherShare, perfectQi, qiMultiplier, anticipation, finisherFreeze, groupFight, groupFinisherStyle, groupSize, groupTotal, textMode, textStyle, textCharHit, artStyle
         case foeLives, finisherTakesLife, lifeSpeedup, lifeDownSeconds
         case bossPressure, bossPushBack, bossCycleCards, bossHit
         case learning
@@ -200,6 +204,8 @@ public struct Tuning: Codable, Sendable, Equatable {
         learning = try v(.learning, d.learning)
         textMode = try v(.textMode, d.textMode)
         textStyle = try v(.textStyle, d.textStyle)
+        textCharHit = try v(.textCharHit, d.textCharHit)
+        artStyle = try v(.artStyle, d.artStyle)
         handZones = try v(.handZones, d.handZones)
         slashMinGap = try v(.slashMinGap, d.slashMinGap)
     }

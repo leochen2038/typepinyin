@@ -228,7 +228,12 @@ final class TextController: KeyTarget {
                 hintShown = false
                 keyboard?.showHint(nil)
                 c.sounds.tick(min(7, letterInSyllable(s)))
-                if typed == s.letters.count { finishSentence(at: t) }
+                if typed == s.letters.count {
+                    finishSentence(at: t)
+                } else if c.tuning.textCharHit && charIndex(in: s) > charIndex(before: typed - 1, in: s) {
+                    c.sounds.play(.hitLight)                 // 打完一个字（不是这句最后一个）：和最后一个字一样一声命中、震一下
+                    c.sounds.hitHaptic(heavy: false)
+                }
             } else {
                 sentenceMistakes += 1
                 shake += 1
@@ -240,8 +245,11 @@ final class TextController: KeyTarget {
         }
     }
 
-    private func charIndex(in s: Sentence) -> Int {
-        var left = typed
+    private func charIndex(in s: Sentence) -> Int { charIndex(before: typed, in: s) }
+
+    /// 打了 n 个字母时，正在打第几个字。
+    private func charIndex(before n: Int, in s: Sentence) -> Int {
+        var left = n
         for (k, syl) in s.syllables.enumerated() { if left < syl.count { return k }; left -= syl.count }
         return s.chars.count
     }

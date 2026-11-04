@@ -177,7 +177,7 @@ struct CodexView: View {
 
     static func text(_ p: CardLevel?) -> Color { (p ?? .met) >= .fluent ? .white : Palette.ink }
 
-    /// 「在葫芦集，从胡大叔手里拿到」/「在白梅台，梅娘手里（还在修路）」。
+    /// 「在葫芦集，从胡大叔手里拿到」/「在白梅台，梅娘手里」；地区没开放时（playable 为 false）后面加「（还在修路）」兜底。
     func placeLine(_ v: String) -> String {
         guard let r = j.region(giving: v) else { return "" }
         return obtained(v) ? "在\(r.name)，从\(r.boss.name)手里拿到" : "在\(r.name)，\(r.boss.name)手里\(r.playable ? "" : "（还在修路）")"

@@ -12,9 +12,9 @@ enum Fixture {
 
     /// 开一场比武，再把三张牌换成指定的词（关掉破绽时不带破绽）。
     /// 旧的规则测试按对手血量判输赢；按招数的一场在 MovesRoundTests 里单独测。
-    static var hpMode: Tuning { var t = Tuning.standard; t.movesPerDuel = 0; t.cardsOnTable = 3; t.qiBar = true; t.prdDamage(); return t }
+    static var hpMode: Tuning { var t = Tuning.standard; t.movesPerDuel = 0; t.cardsOnTable = 3; t.qiBar = true; t.formulaDamage(); return t }
     /// 按招数、3 张牌（MovesRoundTests 用）。
-    static var threeCards: Tuning { var t = Tuning.standard; t.cardsOnTable = 3; t.qiBar = true; t.prdDamage(); return t }
+    static var threeCards: Tuning { var t = Tuning.standard; t.cardsOnTable = 3; t.qiBar = true; t.formulaDamage(); return t }
 
     static func engine(_ cards: [String] = ["朋友", "装修", "光明"], features: DuelEngine.Features = .all,
                        tuning: Tuning = Fixture.hpMode, seed: UInt64 = 1, at t0: Double = 100) -> DuelEngine {
@@ -51,5 +51,5 @@ final class FakeClock {
 
 extension Tuning {
     /// 旧版的伤害和攒气（连招、重数加伤害，必杀按 45 算，完美不多攒气）。旧规则的测试用它。
-    mutating func prdDamage() { comboBonusPerHit = 0.08; rankBonusPerLevel = 0.1; finisherShare = 0; perfectQi = 0 }
+    mutating func formulaDamage() { comboBonusPerHit = 0.08; rankBonusPerLevel = 0.1; finisherShare = 0; perfectQi = 0 }
 }

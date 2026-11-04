@@ -110,6 +110,16 @@ public struct ContentWord: Codable, Sendable, Hashable {
 public struct Look: Codable, Sendable, Hashable {
     public var robe: String
     public var hat: String
+    /// 以下是正式美术用的外形，没写用默认。
+    public var build: String?
+    public var weapon: String?
+    public var face: String?
+    public var trim: String?
+    public var back: String?
+
+    public init(robe: String, hat: String, build: String? = nil, weapon: String? = nil, face: String? = nil, trim: String? = nil, back: String? = nil) {
+        self.robe = robe; self.hat = hat; self.build = build; self.weapon = weapon; self.face = face; self.trim = trim; self.back = back
+    }
 }
 
 /// 掌门或路上的对手。
@@ -121,8 +131,20 @@ public struct Fighter: Codable, Sendable, Hashable {
     public var lifeLines: [String]?
     /// 血量倍数：这个对手一条命的血是按手速算出的标准血量的几倍（同一类对手之间可以不一样）；nil = 1。
     public var hpFactor: Double?
+    /// 掌门被打赢后夸玩家的一句话（拿到秘籍时显示）；没写不显示。
+    public var defeatLine: String?
 }
 
+/// 地区长卷的配色（六位十六进制，如 "#E4EEE6"）。
+public struct RegionThemeSpec: Codable, Sendable, Hashable {
+    public var sky: String
+    public var farHill: String
+    public var nearHill: String
+    public var road: String
+    public var accent: String
+}
+
+/// 旧路网地图的位置（云海群岛按 3×3 的固定顺序排，已经不用；留着只为读旧数据）。
 public struct MapSpot: Codable, Sendable, Hashable {
     public var tier: Int
     public var side: Double
@@ -147,17 +169,19 @@ public struct Region: Codable, Sendable, Hashable, Identifiable {
     public var boss: Fighter
     public var foes: [Fighter]
     public var stationLines: [String]
-    public var map: MapSpot
+    public var map: MapSpot?
     public var playable: Bool
     /// 群战每个人（按出场顺序）的血是标准血量的几倍；nil 或不够长 = 按等级的默认（喽啰 0.15、镖师 0.3、头目 0.5）。
     public var groupHP: [Double]?
+    /// 长卷配色；nil = App 里写死的兜底。
+    public var theme: RegionThemeSpec?
 }
 
 /// 总地图上不是地区的地点：初入江湖、武林大会。
 public struct Place: Codable, Sendable, Hashable, Identifiable {
     public var id: String
     public var name: String
-    public var map: MapSpot
+    public var map: MapSpot?
     public var intro: String?
     public var foes: [Fighter]?
 }

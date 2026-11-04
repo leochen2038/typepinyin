@@ -77,32 +77,6 @@ public enum RoutePlanner {
         return Route(regionId: region.id, stations: stations)
     }
 
-    /// 通关以后再进：不走地图，随机来一场掌门、奇遇、单挑或群战（第一关不出奇遇）。
-    public static func replay(region: Region, content: LearningContent, seed: UInt64) -> Route {
-        var rng = SplitMix(seed: seed)
-        let kinds: [Station.Kind] = region.volume == "base" ? [.boss, .duel, .group] : [.boss, .encounter, .duel, .group]   // 第一关没有奇遇
-        let kind = kinds[Int(rng.next() % UInt64(kinds.count))]
-        let station: Station
-        switch kind {
-        case .boss:
-            station = Station(kind: .boss, foe: region.boss, encounterId: nil, line: region.boss.intro ?? "")
-        case .encounter:
-            let encs = encounterCandidates(region: region, content: content)
-            if let e = encs.isEmpty ? nil : encs[Int(rng.next() % UInt64(encs.count))] {
-                station = Station(kind: .encounter, foe: nil, encounterId: e.id, line: e.intro)
-            } else {
-                station = Station(kind: .duel, foe: region.foes.first, encounterId: nil, line: region.stationLines.first ?? "")
-            }
-        case .group:
-            station = Station(kind: .group, foe: region.foes.first, encounterId: nil, line: groupLine(region))
-        case .duel:
-            let f = region.foes[Int(rng.next() % UInt64(max(1, region.foes.count)))]
-            let l = region.stationLines.isEmpty ? (f.intro ?? "") : region.stationLines[Int(rng.next() % UInt64(region.stationLines.count))]
-            station = Station(kind: .duel, foe: f, encounterId: nil, line: l)
-        }
-        return Route(regionId: region.id, stations: [station])
-    }
-
     static func groupLine(_ region: Region, size: Int? = nil) -> String {
         let who = size.map { "\(["", "一", "两", "三", "四", "五", "六"][min($0, 6)])个人" } ?? "一伙人"
         return "\(who)从路两边围了上来，领头的是\(region.foes.first?.name ?? "")。"
