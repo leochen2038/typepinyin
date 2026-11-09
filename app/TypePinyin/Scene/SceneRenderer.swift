@@ -86,6 +86,22 @@ enum SceneRenderer {
         return point(on: line, at: s)
     }
 
+    /// 第 i 站（共 count 站）的比武背景：站在长卷的哪一段就用哪一张；同一段里的几站把取景左右拉开，每一战看到的不一样。
+    /// pan 是取景位置（0 最左，1 最右）。最后一段的路上对手只用左半边，右边留给掌门站（duelBossX）。
+    static func duelShot(station i: Int, count: Int, scene: RegionScene) -> (segment: Int, pan: CGFloat) {
+        let segments = scene.duelSegments
+        guard !segments.isEmpty else { return (0, CGFloat(min(i, 10)) / 10) }
+        func segment(_ k: Int) -> Int {
+            let y = station(Double(k), count: count, scene: scene, width: scrollDesignWidth).y
+            return segments.firstIndex { y >= $0.minY } ?? segments.count - 1
+        }
+        let seg = i >= count - 1 ? segments.count - 1 : segment(i)            // 走到头的掌门站固定用最后一张
+        let peers = (0..<max(0, count - 1)).filter { segment($0) == seg }     // 这一段路上的站，不算掌门
+        guard let k = peers.firstIndex(of: i) else { return (seg, 0.5) }
+        let t = peers.count > 1 ? CGFloat(k) / CGFloat(peers.count - 1) : 0.5
+        return (seg, seg == segments.count - 1 ? t * 0.5 : t)
+    }
+
     /// 沿路从山脚走，第一次走到 y ≤ limit 时走过了全长的几成。
     static func arcFraction(_ line: [CGPoint], aboveY limit: CGFloat) -> CGFloat {
         guard line.count >= 2 else { return 0 }
@@ -129,10 +145,10 @@ enum SceneRenderer {
     }
 
     /// 比武背景：按固定尺寸画一次（SceneImages.duelSize 的 1.6 倍宽），用的时候按画面高度缩放。
-    static func duel(regionId: String, scene: RegionScene, theme: RegionTheme) -> UIImage {
-        let key = "duel-\(regionId)"
+    static func duel(regionId: String, scene: RegionScene, theme: RegionTheme, segment: Int = 0) -> UIImage {
+        let key = "duel-\(regionId)-\(segment)"
         if let hit = recent[key] { return hit }
-        let img = SceneImages.duel(regionId: regionId, scene: scene, theme: theme)
+        let img = SceneImages.duel(regionId: regionId, scene: scene, theme: theme, segment: segment)
         recent = recent.filter { !$0.key.hasPrefix("duel-") }
         recent[key] = img
         return img
@@ -170,30 +186,67 @@ enum SceneImages {
         queue.sync { scrollOnQueue(regionId, scene, theme, width) }
     }
 
-    static func duel(regionId: String, scene: RegionScene, theme: RegionTheme) -> UIImage {
-        queue.sync { duelOnQueue(regionId, scene, theme) }
+    static func duel(regionId: String, scene: RegionScene, theme: RegionTheme, segment: Int = 0) -> UIImage {
+        queue.sync { duelOnQueue(regionId, scene, theme, segment) }
     }
 
     static func mist(regionId: String, scene: RegionScene, width: CGFloat) -> UIImage {
         queue.sync { mistOnQueue(regionId, scene, width) }
     }
 
+    /// 删掉磁盘上所有场景图（开发用：量装完第一次打开要画多久）。
+    static func clearDiskCache() {
+        guard let dir else { return }
+        try? FileManager.default.removeItem(at: dir)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    }
+
+    /// 预画最后一次花了多久（秒），开发时看。
+    nonisolated(unsafe) static var prewarmSeconds: Double?
+
+    /// 把还没画过的图画好存到磁盘：已经有的不读、不占内存，只有装完第一次打开才真的要画。
+    /// 一张一张排进队列：主线程这时要取图，最多等手上这一张，不用等全部画完。
     static func prewarm(_ jobs: [(String, RegionScene, RegionTheme)], width: CGFloat) {
-        queue.async {
+        DispatchQueue.global(qos: .utility).async {
+            let t = CACurrentMediaTime()
+            removeOldFiles()
             for (id, scene, theme) in jobs {
-                _ = scrollOnQueue(id, scene, theme, width)
-                if !scene.light.mistBands.isEmpty || !scene.light.rays.isEmpty { _ = mistOnQueue(id, scene, width) }
-                _ = duelOnQueue(id, scene, theme)
+                for segment in 0..<max(1, scene.duelSegments.count) {
+                    queue.sync { ensureOnDisk(key: "duel-\(id)-\(segment)", scale: 3) { renderDuel(scene: scene, theme: theme, segment: segment) } }
+                }
+                if !scene.light.mistBands.isEmpty || !scene.light.rays.isEmpty {
+                    queue.sync { ensureOnDisk(key: "mist-\(id)-\(Int(width))", scale: 1) { renderMist(scene: scene, width: width) } }
+                }
+                queue.sync { ensureOnDisk(key: "scroll-\(id)-\(Int(width))", scale: 2) { renderScroll(regionId: id, scene: scene, theme: theme, width: width) } }
             }
+            prewarmSeconds = CACurrentMediaTime() - t
         }
+    }
+
+    private static func fileURL(_ key: String, _ scale: CGFloat) -> URL? { dir?.appendingPathComponent("\(key)@\(Int(scale))x-\(stamp).png") }
+
+    private static func ensureOnDisk(key: String, scale: CGFloat, render: () -> UIImage) {
+        guard let file = fileURL(key, scale), !FileManager.default.fileExists(atPath: file.path) else { return }
+        autoreleasepool {
+            let t = CACurrentMediaTime()
+            let img = render()
+            SceneRenderer.log(key, since: t)
+            if let data = img.pngData() { try? data.write(to: file) }
+        }
+    }
+
+    /// 更新 App 后，上个版本画的图没用了，删掉省空间。
+    private static func removeOldFiles() {
+        guard let dir, let names = try? FileManager.default.contentsOfDirectory(atPath: dir.path) else { return }
+        for name in names where !name.hasSuffix("-\(stamp).png") { try? FileManager.default.removeItem(at: dir.appendingPathComponent(name)) }
     }
 
     private static func scrollOnQueue(_ id: String, _ scene: RegionScene, _ theme: RegionTheme, _ width: CGFloat) -> UIImage {
         image(key: "scroll-\(id)-\(Int(width))", scale: 2) { renderScroll(regionId: id, scene: scene, theme: theme, width: width) }
     }
 
-    private static func duelOnQueue(_ id: String, _ scene: RegionScene, _ theme: RegionTheme) -> UIImage {
-        image(key: "duel-\(id)", scale: 3) { renderDuel(scene: scene, theme: theme) }
+    private static func duelOnQueue(_ id: String, _ scene: RegionScene, _ theme: RegionTheme, _ segment: Int) -> UIImage {
+        image(key: "duel-\(id)-\(segment)", scale: 3) { renderDuel(scene: scene, theme: theme, segment: segment) }
     }
 
     private static func mistOnQueue(_ id: String, _ scene: RegionScene, _ width: CGFloat) -> UIImage {
@@ -202,7 +255,7 @@ enum SceneImages {
 
     private static func image(key: String, scale: CGFloat, render: () -> UIImage) -> UIImage {
         if let hit = memory.first(where: { $0.0 == key })?.1 { return hit }
-        let file = dir?.appendingPathComponent("\(key)@\(Int(scale))x-\(stamp).png")
+        let file = fileURL(key, scale)
         if let file, let data = try? Data(contentsOf: file), let img = UIImage(data: data, scale: scale) {
             remember(key, img)
             return img
@@ -290,12 +343,12 @@ enum SceneImages {
     // MARK: 比武背景
 
     /// 比 duelSize 宽 1.6 倍的平视背景；地面高 duelGround。
-    static func renderDuel(scene: RegionScene, theme: RegionTheme) -> UIImage {
+    static func renderDuel(scene: RegionScene, theme: RegionTheme, segment: Int = 0) -> UIImage {
         let canvas = CGSize(width: duelSize.width * 1.6, height: duelSize.height)
         let format = UIGraphicsImageRendererFormat()
         format.opaque = true
         format.scale = 3
-        if let name = scene.duelAsset, let art = UIImage(named: name) {
+        if scene.duelSegments.indices.contains(segment), let art = UIImage(named: scene.duelSegments[segment].asset) {
             return UIGraphicsImageRenderer(size: art.size, format: format).image { _ in art.draw(in: CGRect(origin: .zero, size: art.size)) }
         }
         return UIGraphicsImageRenderer(size: canvas, format: format).image { ctx in

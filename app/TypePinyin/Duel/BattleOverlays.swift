@@ -129,10 +129,10 @@ struct FinaleBanner: View {
     }
 }
 
-/// 打空对手血条的那一刀：屏幕中间打出「绝杀！」。
+/// 打空对手血条的那一刀：屏幕中间打出「承让！」。
 struct KillBanner: View {
     var body: some View {
-        Text("绝杀！")
+        Text("承让！")
             .font(Fonts.display(64)).foregroundStyle(.white)
             .shadow(color: Palette.ink, radius: 0, x: 4, y: 4)
             .padding(.horizontal, 26).padding(.vertical, 4)

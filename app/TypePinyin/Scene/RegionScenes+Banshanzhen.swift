@@ -1,6 +1,6 @@
 import CoreGraphics
 
-/// 半山镇：长卷和比武背景用矢量图（scrollAsset、duelAsset）；路线用于站点和小人。
+/// 半山镇：长卷和比武背景用矢量图（scrollAsset、duelSegments）；路线用于站点和小人。
 /// items 和 duel 是旧画法，只在调参面板切回旧画法时用。
 extension RegionScenes {
     static let banshanzhen = RegionScene(
@@ -14,7 +14,10 @@ extension RegionScenes {
             skyGlow: 0xFBEFD2,
             duelRays: [0.02, 0.3]),
         scrollAsset: "scroll-banshanzhen",
-        duelAsset: "duel-banshanzhen",
+        duelSegments: [DuelSegment(asset: "duel-banshanzhen-1", minY: 1870),   // 山脚溪涧
+                       DuelSegment(asset: "duel-banshanzhen-2", minY: 1160),   // 竹林石阶
+                       DuelSegment(asset: "duel-banshanzhen-3", minY: 436),    // 镇子
+                       DuelSegment(asset: "duel-banshanzhen-4", minY: 0)],     // 山门
         duelBossX: 625,
         items: [
             .init(kind: .cloud, x: 0.2, y: 46, size: 80), .init(kind: .cloud, x: 0.82, y: 38, size: 76), .init(kind: .cloud, x: 0.55, y: 84, size: 60),

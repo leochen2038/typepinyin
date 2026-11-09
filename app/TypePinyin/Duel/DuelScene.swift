@@ -11,9 +11,10 @@ final class DuelScene: SKScene {
     private let fx = SKNode()
     private let rays = SKNode()
     private let bunting = SKNode()
-    /// 二档气势以上主角身后的光晕。用贴图精灵（白圆，染色），不用矢量形状：矢量形状每帧都要单独画，很耗。
+    /// 二档气势以上主角身后的圆光（默认关，调参面板可开）。用贴图精灵（白圆，染色），不用矢量形状：矢量形状每帧都要单独画，很耗。
     private let aura = SKSpriteNode(texture: SKTexture(image: DuelScene.discImage(radius: 70)))
     private(set) var heat = 0
+    var showAura = false
     var reducedMotion = UIAccessibility.isReduceMotionEnabled
 
     /// 地面高度随战斗区高度变化：大屏 52 pt，小屏按比例缩小。
@@ -38,7 +39,7 @@ final class DuelScene: SKScene {
         world.addChild(aura)
         world.addChild(fx)
         fx.zPosition = 10
-        let p = FigureNode(FigureArt.player())
+        let p = FigureNode(FigureArt.hero())
         player = p
         world.addChild(p)
     }
@@ -48,7 +49,7 @@ final class DuelScene: SKScene {
     /// 特效用：对手胸口、主角持剑的手、特效层。
     var foeAnchor: CGPoint? { foe.map { CGPoint(x: $0.position.x - 10, y: $0.position.y + 100 * $0.yScale) } }
     /// 主角空着的后手（场景坐标），取字（剑气、绳镖）从这里出手、收回，跟着手一起动。
-    var playerHand: CGPoint? { player.map { $0.backArm.convert(FigureNode.backHand, to: self) } }
+    var playerHand: CGPoint? { player.map { $0.backArm.convert($0.backHand, to: self) } }
 
     /// 绳镖：后手甩出去、拽回；接住字母时后手闪一下。
     func throwDart(wind: Double, out: Double, hold: Double, back: Double = 0) {
@@ -103,10 +104,27 @@ final class DuelScene: SKScene {
     /// 正式美术只换场景：比武背景用画好的地区场景。人物保持原来的画法（2026-11-01 产品负责人定）。
     var newArt = false
 
-    func setFoe(robe: UIColor) {
+    /// 人物画法：true = 定稿（每个敌人一个样子），false = 旧画法（同一个人换衣服颜色）。
+    var newFigures = true {
+        didSet {
+            guard newFigures != oldValue else { return }
+            player?.removeFromParent()
+            let p = FigureNode(newFigures ? FigureArt.hero() : FigureArt.player())
+            player = p
+            world.addChild(p)
+            layoutFigures()
+            p.idle(reduced: reducedMotion)
+        }
+    }
+
+    /// 冲到这么近停下：剑平着挥出去时，剑尖刚好够到对手身体（定稿肩膀靠前、剑长 57 点）。
+    private var swordReach: CGFloat { newFigures ? 121 : 118 }
+
+    func setFoe(name: String?, robe: UIColor) {
         foe?.removeFromParent()
-        let f = FigureNode(FigureArt.guardsman(robe: robe))
+        let f = FigureNode(newFigures ? FigureArt.foe(named: name) : FigureArt.guardsman(robe: robe))
         f.xScale = -1
+        f.zPosition = 1                                            // 贴身时压在主角前面，两人的部件不互相穿插
         foe = f
         world.addChild(f)
         layoutFigures()
@@ -115,8 +133,9 @@ final class DuelScene: SKScene {
     }
 
     /// 旅程：比武背景换成这片地区长卷在这一站的局部（nil = 切片的深蓝底）。
-    func setBackdrop(regionId: String?, station: Int, boss: Bool = false) {
+    func setBackdrop(regionId: String?, station: Int, count: Int = 1, boss: Bool = false) {
         backdrop = regionId.map { (RegionTheme.of($0), station) }
+        backdropCount = count
         backdropBoss = boss
         backdropRegion = regionId
         guard size.width > 0 else { return }
@@ -124,12 +143,14 @@ final class DuelScene: SKScene {
     }
     private var backdrop: (RegionTheme, Int)?
     private var backdropRegion: String?
+    private var backdropCount = 1
     private var backdropBoss = false
 
-    /// 有正式美术场景的地区：画好的平视背景按站点平移；否则照旧（按配色画山 / 深蓝底）。
+    /// 有正式美术场景的地区：角色走到长卷哪一段就用哪一张平视背景，同一段里的几站换取景；否则照旧（按配色画山 / 深蓝底）。
     private func renderBackdrop() -> UIImage {
         if newArt, let id = backdropRegion, let scene = RegionScenes.scene(for: id), let (t, station) = backdrop {
-            let art = SceneRenderer.duel(regionId: id, scene: scene, theme: t)        // 固定尺寸画好的，按画面高度缩放
+            let shot = SceneRenderer.duelShot(station: station, count: backdropCount, scene: scene)
+            let art = SceneRenderer.duel(regionId: id, scene: scene, theme: t, segment: shot.segment)   // 固定尺寸画好的，按画面高度缩放
             let format = UIGraphicsImageRendererFormat()
             format.opaque = true
             return UIGraphicsImageRenderer(size: size, format: format).image { _ in
@@ -138,7 +159,7 @@ final class DuelScene: SKScene {
                 let room = max(0, dw - size.width)
                 let pan = backdropBoss && scene.duelBossX != nil
                     ? min(max(0, scene.duelBossX! * k - size.width / 2), room)   // 掌门站：要紧的景物（山门）在两人中间
-                    : room * CGFloat(min(station, 10)) / 10
+                    : room * shot.pan
                 art.draw(in: CGRect(x: -pan, y: 0, width: dw, height: size.height))
             }
         }
@@ -233,7 +254,7 @@ final class DuelScene: SKScene {
         }
     }
 
-    /// 气势档位：0 平静，1 彩旗 + 放射光慢转，2 加金色光环和墨点，3 红色光环、转得最快。
+    /// 气势档位：0 平静，1 彩旗 + 放射光慢转，2 放射光转快、更亮，3 放射光变金、转得最快。
     func setHeat(_ level: Int) {
         let up = level > heat
         heat = level
@@ -254,7 +275,7 @@ final class DuelScene: SKScene {
         }
         bunting.run(.fadeAlpha(to: heat >= 1 ? 1 : 0, duration: d))
         aura.removeAction(forKey: "pulse")
-        if heat >= 2, let p = player {
+        if showAura, heat >= 2, let p = player {
             aura.color = heat >= 3 ? Palette.uiRed : Palette.uiGold
             aura.position = CGPoint(x: p.position.x, y: p.position.y + 80 * p.yScale)
             aura.setScale(p.yScale)
@@ -295,7 +316,9 @@ final class DuelScene: SKScene {
     }
 
     /// 两人站位（占战斗区宽度的比例）。
-    private static let playerX: CGFloat = 0.22, foeX: CGFloat = 0.80
+    private static let foeX: CGFloat = 0.80
+    /// 定稿的剑压低后往前伸得多，主角往后站一点。
+    private var playerX: CGFloat { newFigures ? 0.21 : 0.22 }
 
     /// 脚踩的高度：在地面那条深色带里往下约一半，像站在地上（踩在地面线上会像悬在空中）。
     private var feet: CGFloat { ground * 0.55 }
@@ -304,12 +327,13 @@ final class DuelScene: SKScene {
     private func layoutFigures() {
         // 人物从脚到头顶约 165 pt；头顶上方留出约 84 pt 给对手头上的来招框，不让来招框挡住人物
         let tall = (size.height - feet - 84) / 165
-        // 再按宽度限制：主角剑往前伸 124、对手刀往前伸 98（人物坐标），两人站在 22% 和 80%，兵器之间至少空 20 pt
-        let wide = (size.width * (Self.foeX - Self.playerX) - 20) / (124 + 98)
-        let scale = min(1.15, max(0.45, min(tall, wide)))
+        // 再按宽度限制：主角剑往前伸 124、对手兵器往前伸 98（人物坐标），两人站在 22% 和 80%，兵器之间至少空 20 pt。
+        // 定稿的剑也伸 124，但两边的兵器尖不在同一高度，按 108 算，人物保持 1 倍（剑身 57 点）
+        let wide = (size.width * (Self.foeX - playerX) - 20) / ((newFigures ? 108 : 124) + 98)
+        let scale = min(newFigures ? 1 : 1.15, max(0.45, min(tall, wide)))
         groupBaseScale = scale
-        player?.setScale(groupMode ? scale * Self.groupBody * Self.heroInGroup : scale)    // 群战时主角缩小，但不比场上最大的敌人小
-        player?.position = CGPoint(x: size.width * Self.playerX, y: feet)
+        player?.setScale(groupMode ? scale * groupBodyScale * (newFigures ? 1 : Self.heroInGroup) : scale)    // 群战时主角缩小，但不比场上最大的敌人小
+        player?.position = CGPoint(x: size.width * playerX, y: feet)
         if let f = foe {
             f.yScale = scale
             f.xScale = -scale
@@ -389,10 +413,19 @@ final class DuelScene: SKScene {
 
     // MARK: - 演出
 
-    /// 剑上聚的气（0…1），随打对的字母增加。
-    func setCharge(_ k: CGFloat) {
-        let color: UIColor = heat >= 3 ? Palette.uiRed : Palette.uiGold
-        player?.setSwordGlow(k, color: color)
+    private var swordCutHeld = false
+    /// 剑上聚的气（0…1），随打对的字母增加。刀痕一套的必杀不发光，剑身上一点点长出一道刀痕。
+    func setCharge(_ k: CGFloat, finisher: Bool = false) {
+        if swordCutHeld && k > 0 { return }             // 已经出招了，晚到的取字回调别再改剑
+        if k <= 0 { swordCutHeld = false }
+        if slashFx && finisher && k > 0 {
+            player?.setSwordGlow(0, color: Palette.uiRed)
+            player?.setSwordCut(k, texture: slashTexture)
+        } else {
+            player?.setSwordCut(0, texture: slashTexture)
+            let color: UIColor = heat >= 3 ? Palette.uiRed : Palette.uiGold
+            player?.setSwordGlow(k, color: color)
+        }
     }
 
     /// 主角出招：冲到对手面前，词有几个字就斩几刀，每一刀的剑光里写出一个字。
@@ -402,13 +435,18 @@ final class DuelScene: SKScene {
     func heroStrike(labels: [String], damage: Int, heavy: Bool, flaw: Bool, finisher: Bool, lethal: Bool = false, combo: Int, minGap: Double = 0.075, onHit: @escaping (Int) -> Void) -> [Double] {
         guard let p = player, let f = foe else { return [0] }
         let chars = labels
+        let cut = slashFx && (finisher || lethal)       // 必杀和打空血条的那一招：整套都是刀痕
+        if cut {
+            setCharge(1, finisher: true)
+            swordCutHeld = true
+        }
         if finisher && groupMode && !reducedMotion && !group.isEmpty {
             let per = chars.count <= 5 ? 0.1 : max(minGap, 0.6 / Double(chars.count))
             return groupFinisher(chars: chars, damage: damage, per: per, onHit: onHit)
         }
         let n = max(1, chars.count)
         // 冲到剑尖刚好够到对手身体的地方停下（剑长 124），不冲进对手怀里叠在一起
-        let gap = f.position.x - p.position.x - 118 * p.yScale
+        let gap = f.position.x - p.position.x - swordReach * p.yScale
         // 每刀间隔：短词 0.1 秒；长词压缩但不低于 minGap（调参面板可选 0.06 / 0.075 秒）
         let per = chars.count <= 5 ? 0.1 : max(minGap, 0.6 / Double(chars.count))
         // 必杀：先蓄力半秒（场地变暗、剑光拉满、身上气浪外扩），再冲上去连斩
@@ -437,7 +475,7 @@ final class DuelScene: SKScene {
                 guard let self else { return }
                 let ch = k < chars.count ? chars[k] : ""
                 let last = k == times.count - 1
-                PerfLog.measure("出刀剑光") { self.slash(char: ch, index: k, color: color, big: last) }
+                PerfLog.measure("出刀剑光") { self.slash(char: ch, index: k, color: color, cut: cut, big: last) }
                 self.foe?.hurt(reduced: self.reducedMotion)
                 if finisher && self.groupMode { self.groupHurtAll() }       // 群战：必杀每一刀都打全场
                 if last {
@@ -456,7 +494,7 @@ final class DuelScene: SKScene {
                         return
                     }
                     if finisher || lethal {
-                        self.finisherImpact()           // 必杀和打空对手血条的那一刀：顿帧、白闪、大交叉、击飞
+                        self.finisherImpact()           // 必杀和打空对手血条的那一刀：顿帧、白闪、刀痕、击飞
                     } else {
                         self.hitStop(0.05)          // 最后一刀顿一下，和前面几刀区分开
                         if heavy { self.shake(amount: 5) }
@@ -489,6 +527,8 @@ final class DuelScene: SKScene {
     var anticipation = 0.14
     /// 必杀最后一刀定格几秒（0 = 不定格）。
     var finisherFreeze = 0.8
+    /// 必杀的一整套效果：true = 刀痕（平涂、墨线、两头尖），false = 原来（发光的剑、弧光、粗线交叉）。
+    var slashFx = true
     /// 对手在画面里的位置（0–1，左上为原点），定格时镜头往这里推。
     var foeZoomPoint: CGPoint {
         guard let f = foe, size.width > 0, size.height > 0 else { return CGPoint(x: 0.5, y: 0.5) }
@@ -549,11 +589,22 @@ final class DuelScene: SKScene {
         dim.name = "dim"
         addChild(dim)
         dim.run(.fadeAlpha(to: 0.45, duration: 0.15))
-        player?.setSwordGlow(1, color: Palette.uiRed)
+        if !slashFx { player?.setSwordGlow(1, color: Palette.uiRed) }
         guard let c = playerChest else { return }
         for i in 0..<3 {
             run(.wait(forDuration: Double(i) * 0.14)) { [weak self] in
                 guard let self else { return }
+                if self.slashFx {
+                    // 刀痕一套：一圈短刀痕从胸口往外射，代替半透明的气浪
+                    let s = self.player?.yScale ?? 1
+                    for j in 0..<8 {
+                        let a = CGFloat(j) / 8 * 2 * .pi + CGFloat(i) * 0.26
+                        let r = (44 + 18 * CGFloat(i)) * s
+                        self.drawSlashMark(at: CGPoint(x: c.x + cos(a) * r, y: c.y + sin(a) * r), scale: s, angle: a,
+                                           length: 62, thick: 0.6, draw: 0.1, hold: 0, erase: 0.18)
+                    }
+                    return
+                }
                 let ring = self.cached("ring|\(Palette.uiRed.hashValue)") {
                     let n = SKShapeNode(circleOfRadius: 16)
                     n.strokeColor = Palette.uiRed
@@ -570,12 +621,12 @@ final class DuelScene: SKScene {
         }
     }
 
-    /// 必杀落下：顿帧、全屏白闪、对手身上斩出大交叉、重震、对手被击飞；之后场地亮回来，主角收刀。
+    /// 必杀落下：顿帧、全屏白闪、对手身上斩出刀痕、重震、对手被击飞；之后场地亮回来，主角收刀。
     private func finisherImpact() {
         guard let f = foe else { return }
         impactFlash()
-        crossAndKnockBack(f)
-        if groupMode { for n in groupOthers { crossAndKnockBack(n) } }   // 减少动态效果时的群战必杀：一起挨
+        markAndKnockBack(f)
+        if groupMode { for n in groupOthers { markAndKnockBack(n) } }   // 减少动态效果时的群战必杀：一起挨
     }
 
     /// 必杀落下时全场的那一下：顿帧、白闪、重震；之后场地亮回来，主角收刀。
@@ -668,31 +719,96 @@ final class DuelScene: SKScene {
         impact = m
     }
 
-    /// 打在一个人身上的大交叉剑光，人往后一退再回来（dir = 1 往右退，-1 往左退）。
-    private func crossAndKnockBack(_ f: FigureNode, dir: CGFloat = 1) {
+    /// 必杀打在一个人身上：交叉的两道刀痕（或旧的粗线交叉），人往后一退再回来（dir = 1 往右退，-1 往左退）。
+    private func markAndKnockBack(_ f: FigureNode, dir: CGFloat = 1) {
         let c = CGPoint(x: f.position.x - 10 * f.yScale, y: f.position.y + 90 * f.yScale)
-        let len = 300 * f.yScale
-        for angle in [0.75, -0.75] as [CGFloat] {
-            let path = CGMutablePath()
-            path.move(to: CGPoint(x: -len / 2, y: 0)); path.addLine(to: CGPoint(x: len / 2, y: 0))
-            let line = SKShapeNode(path: path)
-            line.strokeColor = Palette.uiRed
-            line.lineWidth = 14
-            line.lineCap = .round
-            let core = SKShapeNode(path: path)
-            core.strokeColor = .white
-            core.lineWidth = 5
-            core.lineCap = .round
-            line.addChild(core)
-            line.position = c
-            line.zRotation = angle
-            line.zPosition = 12
-            line.xScale = 0.2
-            fx.addChild(line)
-            line.run(.sequence([.scaleX(to: 1, duration: 0.08), .wait(forDuration: 0.15), .fadeOut(withDuration: 0.35), .removeFromParent()]))
+        if slashFx {
+            // 往主角那边挪一点点：对手站得靠屏幕边，正中对着他的话刀尖会出屏幕
+            let at = CGPoint(x: c.x - 8 * f.yScale * dir, y: c.y)
+            let a = Self.slashAngle
+            drawSlashMark(at: at, scale: f.yScale, angle: dir > 0 ? a : .pi - a)
+            drawSlashMark(at: at, scale: f.yScale, angle: dir > 0 ? -a : .pi + a, delay: Self.slashGap)
+        } else {
+            let len = 300 * f.yScale
+            for angle in [0.75, -0.75] as [CGFloat] {
+                let path = CGMutablePath()
+                path.move(to: CGPoint(x: -len / 2, y: 0)); path.addLine(to: CGPoint(x: len / 2, y: 0))
+                let line = SKShapeNode(path: path)
+                line.strokeColor = Palette.uiRed
+                line.lineWidth = 14
+                line.lineCap = .round
+                let core = SKShapeNode(path: path)
+                core.strokeColor = .white
+                core.lineWidth = 5
+                core.lineCap = .round
+                line.addChild(core)
+                line.position = c
+                line.zRotation = angle
+                line.zPosition = 12
+                line.xScale = 0.2
+                fx.addChild(line)
+                line.run(.sequence([.scaleX(to: 1, duration: 0.08), .wait(forDuration: 0.15), .fadeOut(withDuration: 0.35), .removeFromParent()]))
+            }
         }
         let back: CGFloat = 40 * dir
         f.run(.sequence([.moveBy(x: back, y: 0, duration: 0.1), .wait(forDuration: 0.1), .moveBy(x: -back, y: 0, duration: 0.35)]))
+    }
+
+    private static let slashLength: CGFloat = 265
+    private static let slashAngle: CGFloat = 40 * .pi / 180
+    private static let slashGap = 0.06                          // 第二刀比第一刀晚多久
+    private lazy var slashTexture = SKTexture(image: DuelScene.slashImage())
+
+    /// 刀痕贴图：两头尖、中间鼓的红芯，一圈墨线。
+    private static func slashImage() -> UIImage {
+        let line: CGFloat = 3, bulge: CGFloat = 9
+        let height = bulge + line + 2
+        return UIGraphicsImageRenderer(size: CGSize(width: slashLength, height: height)).image { ctx in
+            let g = ctx.cgContext
+            let mid = height / 2
+            let start = CGPoint(x: line, y: mid), end = CGPoint(x: slashLength - line, y: mid)
+            let path = CGMutablePath()
+            path.move(to: start)
+            path.addQuadCurve(to: end, control: CGPoint(x: slashLength / 2, y: mid - bulge))
+            path.addQuadCurve(to: start, control: CGPoint(x: slashLength / 2, y: mid + bulge))
+            path.closeSubpath()
+            g.addPath(path)
+            g.setFillColor(Palette.uiRed.cgColor)
+            g.fillPath()
+            g.addPath(path)
+            g.setStrokeColor(Palette.uiInk.cgColor)
+            g.setLineWidth(line)
+            g.setLineJoin(.round)
+            g.strokePath()
+        }
+    }
+
+    // Motion Prompt #004 · MIT License (c) 2026 Shohei Ohtaki · https://showheyohtaki.github.io/motion-prompt/#004
+    /// 一道刀痕的动作（Motion Prompt #004 ラインドロー）：从起点往前长出来，停一下，再从起点这头往前收掉，缓动是三次 ease-in-out。
+    /// 原版裁切线段，这里用贴图沿长度方向缩放，不用每帧重画；原版画线 1.55 秒、擦除 0.8 秒，这里压到必杀这一下用得上。
+    private func drawSlashMark(at c: CGPoint, scale: CGFloat, angle: CGFloat, delay: Double = 0, length: CGFloat = DuelScene.slashLength,
+                               thick: CGFloat = 1, draw: Double = 0.08, hold: Double = 0.2, erase: Double = 0.35) {
+        let holder = SKNode()
+        holder.position = CGPoint(x: c.x - cos(angle) * length / 2 * scale, y: c.y - sin(angle) * length / 2 * scale)
+        holder.zRotation = angle
+        holder.setScale(scale)
+        holder.zPosition = 12
+        let mark = SKSpriteNode(texture: slashTexture)
+        mark.anchorPoint = CGPoint(x: 0, y: 0.5)
+        mark.xScale = 0
+        mark.yScale = thick
+        holder.addChild(mark)
+        fx.addChild(holder)
+
+        let ease: SKActionTimingFunction = { t in t < 0.5 ? 4 * t * t * t : 1 - pow(-2 * t + 2, 3) / 2 }
+        let grow = SKAction.scaleX(to: length / Self.slashLength, duration: draw)
+        grow.timingFunction = ease
+        let shrink = SKAction.scaleX(to: 0, duration: erase)
+        shrink.timingFunction = ease
+        let slide = SKAction.moveTo(x: length, duration: erase)     // 左端跟着往前走，右端（刀尖）留在原地
+        slide.timingFunction = ease
+        mark.run(.sequence([.wait(forDuration: delay), grow, .wait(forDuration: hold), .group([shrink, slide])]))
+        holder.run(.sequence([.wait(forDuration: delay + draw + hold + erase), .removeFromParent()]))
     }
 
     private func arcNode(color: UIColor, r: CGFloat) -> SKNode {
@@ -735,6 +851,7 @@ final class DuelScene: SKScene {
     /// 开场先把 26 个字母和两种颜色的剑光画成贴图：第一次现画会卡一下，正好卡在出刀的时候。
     func prewarm() {
         guard view != nil, let f = foe else { return }
+        SKTexture.preload([slashTexture]) {}
         let r: CGFloat = 70 * f.yScale
         let size = 46 * f.yScale + 6
         for color in [Palette.uiGold, Palette.uiRed] { _ = arcNode(color: color, r: r) }
@@ -775,20 +892,27 @@ final class DuelScene: SKScene {
     private var textureOffset: [String: CGPoint] = [:]
 
     /// 一刀剑光：一道弧线，弧线中间写出这一刀对应的字母。
-    private func slash(char: String, index: Int, color: UIColor, big: Bool = false, around: FigureNode? = nil, offsetX: CGFloat = 0) {
+    private func slash(char: String, index: Int, color: UIColor, cut: Bool = false, big: Bool = false, around: FigureNode? = nil, offsetX: CGFloat = 0) {
         guard let f = around ?? foe else { return }
         let c = CGPoint(x: f.position.x - 10 * f.yScale + offsetX, y: f.position.y + 95 * f.yScale)
         let r: CGFloat = 70 * f.yScale
         let flip: CGFloat = index % 2 == 0 ? 1 : -1
-        let arc = arcNode(color: color, r: r)
-        arc.position = c
-        arc.zRotation = flip > 0 ? -0.5 : 0.6
-        arc.yScale = flip
-        arc.zPosition = 9
-        fx.addChild(arc)
-        let s0: CGFloat = big ? 1.35 : 1            // 最后一刀的剑光大一圈
-        arc.setScale(s0)
-        arc.run(.sequence([.group([.scale(to: 1.15 * s0, duration: 0.12), .fadeOut(withDuration: 0.25)]), .removeFromParent()]))
+        if cut {
+            // 一刀一个方向，连斩时刀痕不叠在一起；最后一刀长一些
+            let angles: [CGFloat] = [0.55, -0.4, 0.9, -0.75]
+            drawSlashMark(at: c, scale: f.yScale, angle: angles[index % angles.count], length: big ? Self.slashLength : 190,
+                          draw: 0.05, hold: 0.05, erase: 0.14)
+        } else {
+            let arc = arcNode(color: color, r: r)
+            arc.position = c
+            arc.zRotation = flip > 0 ? -0.5 : 0.6
+            arc.yScale = flip
+            arc.zPosition = 9
+            fx.addChild(arc)
+            let s0: CGFloat = big ? 1.35 : 1            // 最后一刀的剑光大一圈
+            arc.setScale(s0)
+            arc.run(.sequence([.group([.scale(to: 1.15 * s0, duration: 0.12), .fadeOut(withDuration: 0.25)]), .removeFromParent()]))
+        }
         guard !char.isEmpty else { return }
         let size = 46 * f.yScale + 6
         let label = glyphNode(char, size: size)
@@ -848,6 +972,8 @@ final class DuelScene: SKScene {
     /// 单挑时的人物大小；群战里主角和敌人都按它乘 groupBody。
     private var groupBaseScale: CGFloat = 1
     private static let groupBody: CGFloat = 0.7
+    /// 定稿的人物比旧画法宽（两脚分得开、手里的东西长），三个人站一起要再小一点才不挤。
+    private var groupBodyScale: CGFloat { newFigures ? 0.62 : Self.groupBody }
     /// 群战里主角相对镖师的大小：和头目差不多，比喽啰、镖师都高一点，始终是场上最显眼的。
     private static let heroInGroup: CGFloat = 1.1
     private var groupSlots: [Int: Int] = [:]
@@ -858,11 +984,14 @@ final class DuelScene: SKScene {
 
     /// 三个站位（占战斗区宽度的比例），0 离主角最近；人比单挑时小一圈。
     private static let groupX: [CGFloat] = [0.58, 0.74, 0.89]
+    private var groupXs: [CGFloat] { newFigures ? [0.56, 0.72, 0.87] : Self.groupX }
     /// 前后错开：中间那个站得靠后一点（高一点、压在后面），三个人不挤成一排。
     private static let groupLift: [CGFloat] = [-12, 16, 2]     // 都在地面那条深色带里，不会像悬在空中
     private static let groupZ: [CGFloat] = [3, 1, 2]
     /// 敌人大小差距不大，三等主要靠衣服颜色分（灰、红、黑）。
-    private func groupScale(_ tier: Int) -> CGFloat { groupBaseScale * Self.groupBody * [0.92, 1.0, 1.08][min(2, tier)] }
+    private func groupScale(_ tier: Int) -> CGFloat {
+        groupBaseScale * groupBodyScale * (newFigures ? [0.97, 1.0, 1.03] : [0.92, 1.0, 1.08])[min(2, tier)]
+    }
     private static let tierRobe: [UIColor] = [UIColor(hex: 0x8A8F9E), Palette.uiRed, UIColor(hex: 0x2B2B2B)]
 
     /// 开一场群战：单挑的对手先藏起来。
@@ -886,12 +1015,13 @@ final class DuelScene: SKScene {
     }
 
     /// 一个敌人上场：从右边走到自己的站位，头上一条小蓄力条。
-    func groupAdd(id: Int, tier: Int, slot: Int, walkIn: Bool) {
-        let f = FigureNode(FigureArt.guardsman(robe: Self.tierRobe[min(2, tier)]))
+    func groupAdd(id: Int, tier: Int, slot: Int, walkIn: Bool, name: String? = nil) {
+        let figure = newFigures ? (name.map { FigureArt.foe(named: $0) } ?? FigureArt.tier(tier)) : FigureArt.guardsman(robe: Self.tierRobe[min(2, tier)])
+        let f = FigureNode(figure)
         let sc = groupScale(tier)
         f.yScale = sc
         f.xScale = -sc
-        let x = size.width * Self.groupX[min(2, slot)]
+        let x = size.width * groupXs[min(2, slot)]
         f.position = CGPoint(x: walkIn ? size.width + 60 : x, y: feet + Self.groupLift[min(2, slot)])
         f.zPosition = Self.groupZ[min(2, slot)]  // 靠前的压在靠后的前面
         world.addChild(f)
@@ -951,9 +1081,9 @@ final class DuelScene: SKScene {
         func hit(_ t: FigureNode, dir: CGFloat = 1) {
             t.hurt(reduced: false)
             burst(on: t, damage: damage, big: true, gold: false, red: false)
-            crossAndKnockBack(t, dir: dir)
+            markAndKnockBack(t, dir: dir)
         }
-        func reach(_ t: FigureNode) -> CGFloat { t.position.x - 118 * p.yScale }   // 剑尖刚好够到这个人的位置
+        func reach(_ t: FigureNode) -> CGFloat { t.position.x - swordReach * p.yScale }   // 剑尖刚好够到这个人的位置
         var times: [Double]
         var lastAt: Double                                                          // 最后一刀回调的时刻（全场挨完）
         switch groupFinisherStyle {
@@ -984,13 +1114,13 @@ final class DuelScene: SKScene {
                 run(.wait(forDuration: times[k])) { [weak self] in
                     guard let self else { return }
                     self.foe = targets[j]
-                    self.slash(char: chars[k], index: k, color: red, big: lastOfOwner, around: targets[j])
+                    self.slash(char: chars[k], index: k, color: red, cut: self.slashFx, big: lastOfOwner, around: targets[j])
                     if k == n - 1 && self.finisherFreeze > 0 {
-                        // 最后一刀定格（#040，同单挑）：砍中、爆数字，慢镜头；完了才大交叉、冲击帧、回调
+                        // 最后一刀定格（#040，同单挑）：砍中、爆数字，慢镜头；完了才刀痕、冲击帧、回调
                         targets[j].hurt(reduced: false)
                         self.burst(on: targets[j], damage: damage, big: true, gold: false, red: false)
                         self.freezeFrame(self.finisherFreeze) { [weak self] in
-                            self?.crossAndKnockBack(targets[j])
+                            self?.markAndKnockBack(targets[j])
                             self?.impactFlash()
                             onHit(k)
                         }
@@ -1017,7 +1147,7 @@ final class DuelScene: SKScene {
                 run(.wait(forDuration: times[k])) { [weak self] in
                     guard let self else { return }
                     p.xScale = k % 2 == 0 ? -facing : facing                        // 一刀转一次身
-                    self.slash(char: chars[k], index: k, color: red, around: p, offsetX: (k % 2 == 0 ? -60 : 60) * p.yScale)
+                    self.slash(char: chars[k], index: k, color: red, cut: self.slashFx, around: p, offsetX: (k % 2 == 0 ? -60 : 60) * p.yScale)
                     onHit(k)
                 }
             }
@@ -1026,13 +1156,13 @@ final class DuelScene: SKScene {
             run(.wait(forDuration: times[n - 1])) { [weak self] in
                 guard let self else { return }
                 p.xScale = facing
-                self.slash(char: chars[n - 1], index: n - 1, color: red, big: true, around: p)
+                self.slash(char: chars[n - 1], index: n - 1, color: red, cut: self.slashFx, big: true, around: p)
                 let ring = SKShapeNode(circleOfRadius: 20)
-                ring.strokeColor = red
+                ring.strokeColor = self.slashFx ? Palette.uiInk : red
                 ring.lineWidth = 10
                 let core = SKShapeNode(circleOfRadius: 20)
-                core.strokeColor = .white
-                core.lineWidth = 3
+                core.strokeColor = self.slashFx ? red : .white
+                core.lineWidth = self.slashFx ? 6 : 3
                 ring.addChild(core)
                 ring.position = CGPoint(x: p.position.x, y: p.position.y + 90 * p.yScale)
                 ring.zPosition = 11
@@ -1058,7 +1188,7 @@ final class DuelScene: SKScene {
             for k in 0..<(n - 1) {
                 run(.wait(forDuration: times[k])) { [weak self] in
                     guard let self else { return }
-                    self.slash(char: chars[k], index: k, color: red, around: near)
+                    self.slash(char: chars[k], index: k, color: red, cut: self.slashFx, around: near)
                     near.hurt(reduced: false)
                     onHit(k)
                 }
@@ -1066,21 +1196,29 @@ final class DuelScene: SKScene {
             let sweepTime = 0.22
             run(.wait(forDuration: times[n - 1])) { [weak self] in
                 guard let self else { return }
-                self.slash(char: chars[n - 1], index: n - 1, color: red, big: true, around: near)
+                self.slash(char: chars[n - 1], index: n - 1, color: red, cut: self.slashFx, big: true, around: near)
                 let y = near.position.y + 95 * near.yScale
                 let startX = reach(near) + 40 * p.yScale, endX = self.size.width + 80
                 let len: CGFloat = 220
                 let path = CGMutablePath()
                 path.move(to: CGPoint(x: -len / 2, y: 0)); path.addLine(to: CGPoint(x: len / 2, y: 0))
-                let blade = SKShapeNode(path: path)
-                blade.strokeColor = red
-                blade.lineWidth = 16
-                blade.lineCap = .round
-                let core = SKShapeNode(path: path)
-                core.strokeColor = .white
-                core.lineWidth = 5
-                core.lineCap = .round
-                blade.addChild(core)
+                let blade: SKNode
+                if self.slashFx {
+                    let mark = SKSpriteNode(texture: self.slashTexture)
+                    mark.yScale = 1.4
+                    blade = mark
+                } else {
+                    let line = SKShapeNode(path: path)
+                    line.strokeColor = red
+                    line.lineWidth = 16
+                    line.lineCap = .round
+                    let core = SKShapeNode(path: path)
+                    core.strokeColor = .white
+                    core.lineWidth = 5
+                    core.lineCap = .round
+                    line.addChild(core)
+                    blade = line
+                }
                 blade.position = CGPoint(x: startX, y: y)
                 blade.zRotation = 0.12
                 blade.zPosition = 11
@@ -1127,6 +1265,29 @@ final class DuelScene: SKScene {
         if foe === f { foe = group.values.first }
         f.run(.sequence([.wait(forDuration: delay), .run { [weak self] in f.knockDown(reduced: self?.reducedMotion ?? false) },
                          .wait(forDuration: 0.8), .removeFromParent()]))
+    }
+
+    /// 群战里一个人被打倒时说一句（武林大会的掌门下台），字浮在他头上。
+    func groupSay(_ id: Int, line: String) {
+        guard let f = group[id] else { return }
+        let label = SKLabelNode(text: line)
+        label.fontName = Fonts.displayName
+        label.fontSize = 20
+        label.fontColor = .white
+        let shadow = SKLabelNode(text: line)
+        shadow.fontName = Fonts.displayName
+        shadow.fontSize = 20
+        shadow.fontColor = Palette.uiInk
+        shadow.position = CGPoint(x: 2, y: -2)
+        shadow.zPosition = -1
+        label.addChild(shadow)
+        let x = min(size.width - label.frame.width / 2 - 8, max(label.frame.width / 2 + 8, f.position.x))
+        label.position = CGPoint(x: x, y: f.position.y + 200 * f.yScale)
+        label.zPosition = 15
+        label.setScale(0.4)
+        fx.addChild(label)
+        label.run(.sequence([.scale(to: 1.1, duration: 0.12), .scale(to: 1, duration: 0.08), .wait(forDuration: 1.1),
+                             .group([.moveBy(x: 0, y: 16, duration: 0.3), .fadeOut(withDuration: 0.3)]), .removeFromParent()]))
     }
 
     /// 一招打倒好几个（必杀打全场）：从近到远一个接一个倒，每人隔 0.06 秒，不同时乱成一团。

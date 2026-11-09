@@ -67,7 +67,7 @@ struct RegionScrollView: View {
     func signPoint(_ i: Int) -> CGPoint {
         let p = Self.point(Double(i), count: route.stations.count, width: width, scene: scene)
         let side: CGFloat = scene != nil || i == route.stations.count - 1 ? 0 : (i % 2 == 0 ? -58 : 58)   // 新画法站牌就在路上
-        return CGPoint(x: p.x + side, y: p.y - (i == route.stations.count - 1 ? 70 : 8))
+        return CGPoint(x: p.x + side, y: p.y - (scene == nil && i == route.stations.count - 1 ? 70 : 8))   // 新画法掌门的标记也在路上
     }
 
     // MARK: 站牌
@@ -75,6 +75,8 @@ struct RegionScrollView: View {
     @ViewBuilder func sign(_ i: Int, _ st: Station) -> some View {
         let done = i < cleared
         switch st.kind {
+        case .boss where scene != nil:                             // 掌门：和别的站一样是圆的，黑底金字，一眼分得开
+            badge("掌", fill: Palette.ink, text: Palette.gold)
         case .boss:
             VStack(spacing: 3) {
                 Text("掌").font(Fonts.display(20)).foregroundStyle(Palette.gold)
@@ -290,7 +292,7 @@ struct OnRoad: ViewModifier, @preconcurrency Animatable {
 /// 长卷上的小人：主角赶路的样子（剑背在身后）；比武里才是战斗姿势。
 struct HeroMarker: View {
     var walking = false
-    static let height: CGFloat = 52
+    static let height: CGFloat = 60                    // 定稿的比例瘦长，比原来的 52 高一点才看得清
 
     var body: some View {
         Group {
@@ -308,24 +310,21 @@ struct HeroMarker: View {
 
 // Motion Prompt #029 · MIT License (c) 2026 Shohei Ohtaki · https://showheyohtaki.github.io/motion-prompt/#029
 /// 走路的主角：照跟拍（#029）里走路的人，腿和手按正弦前后摆、手和腿反着摆，每迈一步身子往上一点（脚着地时最低）。
-/// 原版摆幅 0.42 弧度、sin(t×7)；试玩觉得步子太大，改成小步：摆幅 0.22、sin(t×8)。部件绕各自的关节转，画法和站着时一样。
+/// 原版摆幅 0.42 弧度、sin(t×7)；试玩觉得步子太大，改成小步：摆幅 0.22、sin(t×11)（走得快，腿也倒得快）。部件绕各自的关节转，画法和站着时一样。
 struct WalkingHero: View {
     let t: Double
-    @MainActor static let figure = FigureArt.playerTravel()
+    @MainActor static let figure = FigureArt.catalog("herotravel")
     @MainActor static let box: CGRect = {
-        let f = figure
         var b = CGRect.null
-        for s in [f.backArm, f.backLeg, f.frontLeg, f.body, f.frontArm].flatMap(\.shapes) {
-            b = b.union(s.path.boundingBoxOfPath.insetBy(dx: -s.width / 2 - 2, dy: -s.width / 2 - 2))
-        }
+        for p in figure.layers { b = b.union(p.bounds) }
         return b.insetBy(dx: -8, dy: -4)                        // 腿摆开、身子上下时留点边
     }()
 
     var body: some View {
         let f = Self.figure, box = Self.box
         let k = HeroMarker.height / box.height
-        let swing = sin(t * 8) * 0.22
-        let bob = -abs(sin(t * 8)) * 1.4                           // 两腿分开时身子最高
+        let swing = sin(t * 11) * 0.22
+        let bob = -abs(sin(t * 11)) * 1.4                           // 两腿分开时身子最高
         Canvas { ctx, _ in
             ctx.scaleBy(x: k, y: k)
             ctx.translateBy(x: -box.minX, y: -box.minY)
@@ -334,6 +333,7 @@ struct WalkingHero: View {
                 c.translateBy(x: part.pivot.x, y: part.pivot.y + lift)
                 c.rotate(by: .radians(angle))
                 c.translateBy(x: -part.pivot.x, y: -part.pivot.y)
+                if let a = part.asset { c.draw(Image(a), in: part.box) }
                 for s in part.shapes {
                     let path = Path(s.path)
                     if let fill = s.fill { c.fill(path, with: .color(Color(uiColor: fill))) }
@@ -342,6 +342,7 @@ struct WalkingHero: View {
                     }
                 }
             }
+            if let back = f.back { draw(back, angle: 0, lift: bob) }
             draw(f.backArm, angle: swing * 0.6, lift: bob)
             draw(f.backLeg, angle: swing, lift: bob)
             draw(f.frontLeg, angle: -swing, lift: bob)

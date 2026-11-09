@@ -162,10 +162,10 @@ struct RegionView: View {
         hero = Double(from)
         cameraY = cameraFor(Double(from), count: n, height: height, width: width)
         busy = true
-        // 走多久按路有多长：慢慢走，看得到主角赶路（约每秒 70 点，2.4–6 秒，点一下可以跳过）
+        // 走多久按路有多长：看得到主角赶路，又不让人等（约每秒 130 点，1.4–3.2 秒，点一下可以跳过）
         let a = RegionScrollView.point(Double(from), count: n, width: width, scene: j.currentRegion.flatMap(scene))
         let b = RegionScrollView.point(to, count: n, width: width, scene: j.currentRegion.flatMap(scene))
-        let d = fast ? 0.01 : min(6, max(2.4, Double(hypot(b.x - a.x, b.y - a.y)) * 1.15 / 70))
+        let d = fast ? 0.01 : min(3.2, max(1.4, Double(hypot(b.x - a.x, b.y - a.y)) * 1.15 / 130))
         // Motion Prompt #029 · MIT License (c) 2026 Shohei Ohtaki · https://showheyohtaki.github.io/motion-prompt/#029
         // 跟拍：镜头和主角同速、匀速不缓动，主角始终在画面里同一个位置（镜头按主角每一帧的位置算，见 CameraFollow）
         withAnimation(.linear(duration: d)) { hero = to }

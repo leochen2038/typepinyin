@@ -41,6 +41,8 @@ public struct Tuning: Codable, Sendable, Equatable {
     public var anticipation: Double = 0.14
     /// 必杀最后一刀定格几秒（0 = 不定格）：画面停住、盖上成语，比武计时也停。
     public var finisherFreeze: Double = 0.8
+    /// 必杀的一整套效果：1 = 刀痕（平涂、墨线、两头尖：剑上长刀痕、每一刀一道刀痕、最后交叉），0 = 原来（发光的剑、弧光、粗线交叉）。
+    public var finisherFx: Int = 1
     /// 群战（试玩）：一场好几个敌人，场上最多 groupSize 个，倒下一个补一个，一共 groupTotal 个；
     /// 打完一张牌自动打蓄力最多的那个并打断它的蓄力，必杀打全场。只在一张牌模式下有效。
     public var groupFight: Bool = false
@@ -64,13 +66,26 @@ public struct Tuning: Codable, Sendable, Equatable {
     public var learning: LearningTuning = LearningTuning()
     /// 打什么：3 = 旅程（默认：初入江湖、地区、总地图），0 = 比武，1 = 短句（奇遇），2 = 文章（下一篇）。
     public var textMode: Int = 3
+    /// 开场：1 = 碑文（一句开场白就到江湖地图，每座岛第一次进去先在门口打一句碑文），0 = 梦里和妙笔书生比武（原来的，没有碑）。
+    public var openingStyle: Int = 1
+    /// 课程编排（2026-11-09）：1 = 按韵母分卷、先鼻音（葫芦集 → 半山镇 → 长风城 → 白梅台 → 潮头岛 → 月牙湾 → 绿泉居 → 垂柳村 → 小桥乡 → 黄花关）、
+    /// 一个词只归一关、葫芦集和别的岛一样多站；0 = 原来（基本功 30 个音节、葫芦集 6 战、牌不按关分）。重开 App 生效。
+    public var curriculum: Int = 1
     /// 试玩：打文字时的动效。0 = 简版（打完一句半秒快爆），1 = 战斗动效 + 回顾（打完一句翻回顾牌、逐个字母爆开），
-    /// 2 = 战斗动效、不要回顾（下划线、打完一个字变红迸粒子，打完一句马上下一句；默认）。
-    public var textStyle: Int = 2
+    /// 2 = 战斗动效、不要回顾（下划线、打完一个字变红迸粒子，打完一句马上下一句），
+    /// 3 = 边打边爆（默认，2026-11-09）：打完的句子往上翻走、一路爆字母，下一句同时升上来、马上能打；完美的爆完盖印；
+    /// 最后一句原位翻回顾牌、逐个字母爆开，最后一个字母落下时冲击帧加震屏。
+    /// 4 = 同行边爆边出：打完的句子留在原位，一道刀光从左往右扫过，扫到的字爆开、新的一句跟着露出来；最后一句同 3。
+    /// 5 = 3 和 4 交替：第一句飞走、第二句扫掉、第三句飞走……；最后一句同 3。
+    public var textStyle: Int = 3
     /// 打文字时每打完一个字都来一声命中、震一下（和一句的最后一个字一样）；关掉就只有最后一个字有。
     public var textCharHit: Bool = true
     /// 场景的画法：0 = 旧画法（几道山形），1 = 正式美术。没换成新画法的地区自动用旧画法。人物不受影响。
     public var artStyle: Int = 1
+    /// 人物画法：1 = 主角定稿的画法（每个敌人一个样子），0 = 旧画法（同一个人换衣服颜色）。
+    public var figureStyle: Int = 1
+    /// 连招二档、三档时主角身后的金色、红色圆光。默认关。
+    public var comboAura: Bool = false
     public var groupSize: Int = 3
     public var groupTotal: Int = 5
     public var heavyLetters: Int = 10
@@ -125,8 +140,8 @@ public struct Tuning: Codable, Sendable, Equatable {
         case qiPerStrikeBase, qiPerStrikeMax, qiParry, qiBlock, finisherBase, finisherComboBonus
         case heavyLetters, mediumLetters, replayOffsets, commitOnRelease
         case expectedKeyGrowPt, nearMissMaxPt, hapticsOnKey, comboGoldAt, comboRedAt, movesPerDuel, goldSecondsPerLetter, hintSeconds
-        case cardsOnTable, pressureFactor, pressureBaseSeconds, pressureMinSeconds, grabStyle, handZones, slashMinGap, grabMode, qiBar, moveDots, rankFx, rankFxTheme, finisherShare, perfectQi, qiMultiplier, anticipation, finisherFreeze, groupFight, groupFinisherStyle, groupSize, groupTotal, textMode, textStyle, textCharHit, artStyle
-        case foeLives, finisherTakesLife, lifeSpeedup, lifeDownSeconds
+        case cardsOnTable, pressureFactor, pressureBaseSeconds, pressureMinSeconds, grabStyle, handZones, slashMinGap, grabMode, qiBar, moveDots, rankFx, rankFxTheme, finisherShare, perfectQi, qiMultiplier, anticipation, finisherFreeze, groupFight, groupFinisherStyle, groupSize, groupTotal, textMode, textStyle, textCharHit, artStyle, figureStyle
+        case foeLives, finisherTakesLife, lifeSpeedup, lifeDownSeconds, comboAura, finisherFx, openingStyle, curriculum
         case bossPressure, bossPushBack, bossCycleCards, bossHit
         case learning
     }
@@ -203,9 +218,14 @@ public struct Tuning: Codable, Sendable, Equatable {
         bossHit = try v(.bossHit, d.bossHit)
         learning = try v(.learning, d.learning)
         textMode = try v(.textMode, d.textMode)
+        openingStyle = try v(.openingStyle, d.openingStyle)
+        curriculum = try v(.curriculum, d.curriculum)
         textStyle = try v(.textStyle, d.textStyle)
         textCharHit = try v(.textCharHit, d.textCharHit)
         artStyle = try v(.artStyle, d.artStyle)
+        figureStyle = try v(.figureStyle, d.figureStyle)
+        comboAura = try v(.comboAura, d.comboAura)
+        finisherFx = try v(.finisherFx, d.finisherFx)
         handZones = try v(.handZones, d.handZones)
         slashMinGap = try v(.slashMinGap, d.slashMinGap)
     }

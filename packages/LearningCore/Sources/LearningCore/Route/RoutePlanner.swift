@@ -29,16 +29,16 @@ public struct Route: Codable, Sendable, Equatable {
 }
 
 /// 排路线：8–10 战（单挑、群战、掌门），倒数第二站一定是群战，最后是掌门；中间也可能再有一场群战。
-/// 第一关固定 5 战：单挑、3 人群战、单挑、5 人群战、掌门；没有奇遇。
-/// 奇遇另算：第一关没有奇遇；别的地区 1–2 场，随机放在前面。
+/// 奇遇另算：1–2 场（有几段放几段），随机放在前面。葫芦集和别的岛一样（2026-11-09 改）。
+/// 原来的课程（shortFirstLevel）：第一关固定 6 战：单挑、3 人群战、单挑、单挑、5 人群战、掌门；没有奇遇。
 public enum RoutePlanner {
     /// 第一关的排法：每站是单挑（nil）还是几个人的群战，最后再加掌门。
-    public static let firstLevel: [Int?] = [nil, 3, nil, 5]
+    public static let firstLevel: [Int?] = [nil, 3, nil, nil, 5]
 
-    public static func plan(region: Region, content: LearningContent, seed: UInt64) -> Route {
+    public static func plan(region: Region, content: LearningContent, seed: UInt64, shortFirstLevel: Bool = false) -> Route {
         var rng = SplitMix(seed: seed)
-        let first = region.volume == "base"
-        let fights = first ? firstLevel.count + 1 : Int(rng.next() % 3) + 8   // 第一关 5 战，别的 8–10 战
+        let first = shortFirstLevel && region.volume == "base"
+        let fights = first ? firstLevel.count + 1 : Int(rng.next() % 3) + 8   // 第一关 6 战，别的 8–10 战
         let encs = encounterCandidates(region: region, content: content)
         var lines = region.stationLines.shuffled(using: &rng)
         func line(for foe: Fighter) -> String {

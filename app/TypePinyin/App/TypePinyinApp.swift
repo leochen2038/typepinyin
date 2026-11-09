@@ -7,7 +7,11 @@ struct TypePinyinApp: App {
 
     init() {
         AppResources.registerFonts()
-        let c = DuelController(tuning: TuningStore.load())
+        var tuning = TuningStore.load()
+        // 开发用：-demoTextMode 2 直接打文章，-demoTextStyle N 换打文字的动效（只这一次启动，不存）
+        if UserDefaults.standard.object(forKey: "demoTextMode") != nil { tuning.textMode = UserDefaults.standard.integer(forKey: "demoTextMode") }
+        if UserDefaults.standard.object(forKey: "demoTextStyle") != nil { tuning.textStyle = UserDefaults.standard.integer(forKey: "demoTextStyle") }
+        let c = DuelController(tuning: tuning)
         _controller = State(initialValue: c)
         _journey = State(initialValue: JourneyController(duel: c))
     }

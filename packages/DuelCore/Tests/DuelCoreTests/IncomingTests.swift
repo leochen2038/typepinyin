@@ -27,6 +27,15 @@ import Testing
         #expect(inc.duration >= 2.4)
     }
 
+    @Test func wrongFirstLetterHintsTheIncomingFirst() {
+        let (e, clock) = engineWithIncoming()
+        let first = e.opponent.incoming!.word.firstLetter
+        var used = Set(e.cards.compactMap { $0.word.letters.first })
+        used.insert(first)
+        let wrong = "abcdefghijklmnopqrstuvwxyz".first { !used.contains($0) }!
+        #expect(clock.type(e, String(wrong)).contains(.hint(first)))
+    }
+
     @Test func incomingUsesOnlyLearnedSyllables() {
         for seed in 1...30 {
             let e = Fixture.engine(features: [.incoming], seed: UInt64(seed))

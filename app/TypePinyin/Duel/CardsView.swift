@@ -49,6 +49,7 @@ struct FlipIn: ViewModifier {
 struct WordColumns: View {
     let card: DuelController.CardVM
     var scale: CGFloat = 1
+    @Environment(\.reportsColumns) private var reportsColumns
     /// 给了宽度时（打文字）：按每个字的拼音长短算出正好填满这么宽的字号（18–40pt），每个字按完整拼音占位，长拼音不压到旁边的字。
     var fitWidth: CGFloat? = nil
     @ScaledMetric(relativeTo: .title) private var base: CGFloat = 30
@@ -71,6 +72,7 @@ struct WordColumns: View {
                 CharColumn(char: chars[k], syllable: k < card.syllables.count ? card.syllables[k] : "",
                            pinyin: parts[k].text, current: parts[k].current, done: parts[k].done,
                            charSize: charSize, pySize: pySize, reserve: fitted != nil)
+                    .modifier(ColumnReport(on: reportsColumns))
             }
         }
         .minimumScaleFactor(0.7)
@@ -90,6 +92,28 @@ struct WordColumns: View {
         }
         while out.count < card.text.count { out.append(("", false, false)) }
         return out
+    }
+}
+
+/// 词牌每一列（一个字加它的拼音）的位置，按从左到右排；同行边爆边出时按它算刀光扫到每个字的时刻、在哪儿爆。
+struct ColumnBoundsKey: PreferenceKey {
+    static let defaultValue: [Anchor<CGRect>] = []
+    static func reduce(value: inout [Anchor<CGRect>], nextValue: () -> [Anchor<CGRect>]) { value.append(contentsOf: nextValue()) }
+}
+
+private struct ReportsColumnsKey: EnvironmentKey { static let defaultValue = false }
+extension EnvironmentValues {
+    /// 词牌要不要报每一列的位置（平时不报，省得每次排版都多算一遍）。
+    var reportsColumns: Bool {
+        get { self[ReportsColumnsKey.self] }
+        set { self[ReportsColumnsKey.self] = newValue }
+    }
+}
+
+struct ColumnReport: ViewModifier {
+    let on: Bool
+    func body(content: Content) -> some View {
+        if on { content.anchorPreference(key: ColumnBoundsKey.self, value: .bounds) { [$0] } } else { content }
     }
 }
 
@@ -431,7 +455,7 @@ struct FlipX: ViewModifier {
 /// 回顾牌：整张牌在一块画布上按时间画出来（牌底、字、拼音、每个字母的放大、迸散的纸屑和星星、震动、冲击波、金字印）。
 /// 做法：字母、字、纸屑、星星都先画成「符号」（只画一次，缓存成图），每帧只按位置、缩放、旋转把它们盖上去；
 /// 不在每帧重新排字、画形状，字母再多也不卡。纸屑按速度、重力、阻力飞，位置由时间直接算出来。
-struct ReviewCard: View {
+struct ReviewCard: View, Equatable {
     let review: DuelController.Review
     let card: CGSize
     /// 试看秘籍重数的爆字母效果：-1 = 不试看（每个字母按自己那一卷的重数），0–5 = 所有字母按这一重来爆；theme 非空时所有字母都用这一卷的主题。
@@ -439,6 +463,8 @@ struct ReviewCard: View {
     var theme = ""
     /// 玩家每一卷练到第几重（没拿到的不在里面 = 零重，爆默认彩纸）。
     var volumeRanks: [String: Int] = [:]
+    /// 每爆一个字母整张牌往下顿一下（比武里对应一刀）。打文字时句子飞走一路连着爆，不顿：一顿一顿叠在往上飞的路上会抖。
+    var nudges = true
     /// 画布比牌大一圈，冲击波、纸屑、金字印能画到牌外面；四重起粒子往上冲得远，画布再放大。
     private func pad(_ L: Layout) -> CGFloat { (L.ranks.max() ?? 0) >= 4 ? 360 : 90 }
 
@@ -458,7 +484,7 @@ struct ReviewCard: View {
         let L = layout()
         TimelineView(.animation) { tl in
             let now = tl.date.timeIntervalSinceReferenceDate
-            Canvas { ctx, _ in draw(ctx, L, now: now) } symbols: {
+            Canvas { ctx, _ in PerfLog.measure("回顾牌每帧画") { draw(ctx, L, now: now) } } symbols: {
                 // 所有符号放在同一个 ForEach 里，id 用各自的编号：几个 ForEach 并列时 id 会重复，Canvas 会直接崩
                 ForEach(symbolIDs(L), id: \.self) { id in symbol(id, L).tag(id) }
             }
@@ -539,7 +565,7 @@ struct ReviewCard: View {
         let grow = doneAt.map { Self.easeOut(min(1, (now - $0) / 0.15)) } ?? 0
         let scale = 1.04 + 0.04 * grow
         let dn = now - lastPop
-        let nudge: CGFloat = dn < 0.03 ? 5 * dn / 0.03 : dn < 0.15 ? 5 * (1 - (dn - 0.03) / 0.12) : 0
+        let nudge: CGFloat = !nudges ? 0 : dn < 0.03 ? 5 * dn / 0.03 : dn < 0.15 ? 5 * (1 - (dn - 0.03) / 0.12) : 0
         var g = ctx
         let inset = pad(L)
         g.translateBy(x: inset + card.width / 2, y: inset + card.height / 2 + nudge)

@@ -46,12 +46,11 @@ import Testing
         return st
     }
 
-    /// 这一卷会了一半、有要复习的：按出牌理由算，本卷（已会 + 没会）占五到七成，一场里同一个词不超过两次。
-    /// 没有要复习的时候，复习那一份分给其他几类，本卷会到八成多（出牌规则如此，见 Dealer.dealInRegion）。
+    /// 这一卷会了一半、有要复习的：按出牌理由算，本卷（已会 + 没会）占七到九成（2026-11-09 起主题牌八成），一场里同一个词不超过两次。
     @Test(arguments: regionVolumes) func roadShareAndRepeats(_ v: String) {
         let st = run(v, learner(knowing: v, share: 0.5, dueBase: true), lengths: Self.road)
         let share = Double(st.byVolumeReason) / Double(st.total)
-        #expect(share >= 0.5 && share <= 0.7, "\(v) 本卷占比 \(share)")
+        #expect(share >= 0.7 && share <= 0.9, "\(v) 本卷占比 \(share)")
         #expect(st.maxRepeat <= 2, "\(v) 一场里同一个词出了 \(st.maxRepeat) 次")
     }
 

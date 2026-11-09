@@ -8,8 +8,11 @@ public struct DealContext: Codable, Sendable, Equatable {
     public var newToday = 0
     /// 招式牌几个字的比重，比如前面的站 [2: 0.85, 3: 0.15]，掌门 [3: 0.4, 4: 0.35, 5: 0.25]。
     public var lengths: [Int: Double]
-    /// 只许用这些音节（第一关：第一卷的 30 个）；nil = 不限。牌、复习、必杀都照这个来。
+    /// 只许用这些音节；nil = 不限。牌、复习、必杀都照这个来。
+    /// 一个词只归一关：第 k 关传前 k 关的全部音节（原来的课程只在第一关传那 30 个）。
     public var allowedSyllables: Set<String>?
+    /// 本关的主题牌只挑含这些音节的词（葫芦集：带 zh ch sh 这类三个字母的，每张牌都不全是两个字母）；nil = 本卷全部。
+    public var focus: Set<String>?
     /// 只从这些词里出（初入江湖的梦）；nil = 按规则从内容包里挑。
     public var pool: [ContentWord]?
     /// 第一张牌固定出这个词（教学）。
@@ -20,9 +23,10 @@ public struct DealContext: Codable, Sendable, Equatable {
     public var collected: Set<String>
 
     public init(volume: String?, today: DayIndex, newToday: Int = 0, lengths: [Int: Double] = [2: 1],
-                allowedSyllables: Set<String>? = nil, pool: [ContentWord]? = nil, firstWord: ContentWord? = nil,
+                allowedSyllables: Set<String>? = nil, focus: Set<String>? = nil, pool: [ContentWord]? = nil, firstWord: ContentWord? = nil,
                 weights: [String: Double]? = nil, collected: Set<String> = []) {
         self.collected = collected
+        self.focus = focus
         self.pool = pool
         self.weights = weights
         self.firstWord = firstWord
@@ -161,21 +165,26 @@ public final class Dealer: @unchecked Sendable {
             }
         }
         roll = due.isEmpty ? roll * (1 - t.mixReview) : roll       // 没有要复习的，复习那一份分给其他三类
-        let inVol = content.syllables(in: vol).map(\.spelling)
+        let inVol = content.syllables(in: vol).map(\.spelling).filter { context.focus?.contains($0) ?? true }
         let newOnes = inVol.filter(isNew)
         let knownOnes = inVol.filter { !isNew($0) }
         let pNew = t.mixNew / (t.mixKnown + t.mixNew + t.mixFiller)
         let pKnown = t.mixKnown / (t.mixKnown + t.mixNew + t.mixFiller)
         let r2 = Double(rng.next() % 10_000) / 10_000
-        if r2 < pNew, newAllowed, !newOnes.isEmpty {
-            for s in newOnes.sorted(by: { content.commonChars(of: $0).count > content.commonChars(of: $1).count }).prefix(6).shuffled(using: &rng) {
+        func dealNew() -> DealtWord? {
+            guard newAllowed, !newOnes.isEmpty else { return nil }
+            for s in newOnes.sorted(by: { content.commonChars(of: $0).count > content.commonChars(of: $1).count }).prefix(t.newPickTop).shuffled(using: &rng) {
                 if let w = pickWord(containing: s, avoid: avoid, allowNew: s) { return finish(w, .newInVolume) }
             }
+            return nil
         }
+        if r2 < pNew, let w = dealNew() { return w }
         if r2 < pNew + pKnown || (r2 < pNew + pKnown + 0.01) {
             for s in knownOnes.shuffled(using: &rng) {
                 if let w = pickWord(containing: s, avoid: avoid) { return finish(w, .knownInVolume) }
             }
+            // 本卷还凑不出会的牌（刚进这一关）：护栏允许就先带一个新的进来，不拿垫底凑
+            if context.allowedSyllables != nil, let w = dealNew() { return w }
         }
         return finish(pickEasy(avoid: avoid, topN: 600), .filler)
     }

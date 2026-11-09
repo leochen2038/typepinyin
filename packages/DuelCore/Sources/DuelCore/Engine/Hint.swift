@@ -11,7 +11,7 @@ extension DuelEngine {
         events.append(.hint(l[typed]))
     }
 
-    /// 锁定目标后卡住 hintSeconds 秒：提示它的下一个字母。首字母不提示。
+    /// 锁定目标后卡住 hintSeconds 秒：提示它的下一个字母。首字母卡住不提示（打错了才提示，见 firstLetterWrong）。
     /// 被提示过的那一招不算金色。
     func checkHint() {
         // 首字母不提示：还没锁定目标时由玩家自己挑牌

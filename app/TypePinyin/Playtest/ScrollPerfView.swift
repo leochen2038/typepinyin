@@ -42,11 +42,17 @@ final class ScrollPerfProbe: NSObject {
     private var late = 0
     private var expected = 0.0
     private var peak = 0.0
+    private var startPeak = 0.0
+    private var sampler: Timer?
 
     func start(viewH: CGFloat) {
         guard link == nil, !ready else { return }
         self.viewH = viewH
         report = "启动时内存 \(String(format: "%.0f", Self.footprint())) MB\n"
+        sampler = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.startPeak = max(self?.startPeak ?? 0, Self.footprint()) } }   // 从一开始就记，首次预画也算进去
+        // 装完第一次打开的情况：缓存清空，十片地区从零预画一遍
+        SceneImages.clearDiskCache()
+        SceneRenderer.prewarm(regionIds: ["huluji", "baimeitai", "chaotoudao", "yueyawan", "chuiliucun", "lvquanju", "banshanzhen", "changfengcheng", "xiaoqiaoxiang", "huanghuaguan"], width: UIScreen.main.bounds.width)
         Task.detached(priority: .userInitiated) {
             let text = ScrollPerfProbe.measureStill()
             await MainActor.run { self.beginScrolling(text) }
@@ -92,6 +98,14 @@ final class ScrollPerfProbe: NSObject {
 
     private func beginScrolling(_ text: String) {
         report += text
+        for (id, count) in [("huluji", 6), ("baimeitai", 10), ("chaotoudao", 10), ("yueyawan", 10), ("chuiliucun", 10), ("lvquanju", 10), ("banshanzhen", 10), ("changfengcheng", 10), ("xiaoqiaoxiang", 10), ("huanghuaguan", 10)] {
+            guard let scene = RegionScenes.scene(for: id) else { continue }     // 这么多站时，每一站用第几张比武背景、取景在哪
+            let shots = (0..<count).map { i -> String in
+                let s = SceneRenderer.duelShot(station: i, count: count, scene: scene)
+                return String(format: "%d(%.2f)", s.segment + 1, s.pan)
+            }
+            report += "\(id) \(count) 站：" + shots.joined(separator: " ") + "\n"
+        }
         ready = true
         startedAt = CACurrentMediaTime()
         let l = CADisplayLink(target: self, selector: #selector(tick(_:)))
@@ -123,6 +137,8 @@ final class ScrollPerfProbe: NSObject {
         report += String(format: "刷新间隔 %.1f ms\n拖动 %d 帧，掉帧 %d（%.1f%%），平均 %.1f ms，最长 %.1f ms\n长卷刚显示时最长一帧 %.1f ms\n内存峰值 %.0f MB\n",
                          expected * 1000, intervals.count, late, Double(late) / Double(max(1, intervals.count)) * 100,
                          sorted.reduce(0, +) / Double(max(1, sorted.count)) * 1000, (sorted.last ?? 0) * 1000, first * 1000, peak)
+        sampler?.invalidate()
+        report += String(format: "从启动起内存峰值 %.0f MB\n预画全部图 %.1f 秒\n", startPeak, SceneImages.prewarmSeconds ?? -1)
         let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("scroll-perf.txt")
         try? report.write(to: url, atomically: true, encoding: .utf8)
     }

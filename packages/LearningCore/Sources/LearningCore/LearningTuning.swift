@@ -23,15 +23,18 @@ public struct LearningTuning: Codable, Sendable, Equatable {
 
     // 出字
     /// 在地区里：本卷已会、本卷没会、复习、垫底各占多少。
-    public var mixKnown: Double = 0.35
-    public var mixNew: Double = 0.25
-    public var mixReview: Double = 0.3
-    public var mixFiller: Double = 0.1
+    /// 2026-11-09 改成主题牌（已会 + 没会）八成、复习 15%、垫底 5%（原来 0.35 / 0.25 / 0.3 / 0.1）。
+    public var mixKnown: Double = 0.5
+    public var mixNew: Double = 0.3
+    public var mixReview: Double = 0.15
+    public var mixFiller: Double = 0.05
     /// 一场最多几个新音节；出完一个新的，后面至少隔几张会的。
     public var newPerDuel: Int = 3
     public var newGap: Int = 2
-    /// 每天最多新学几个音节。
-    public var newPerDay: Int = 8
+    /// 每天最多新学几个音节（2026-11-09 从 8 改成 15：一座岛走一趟能碰到更多本卷的音节）。
+    public var newPerDay: Int = 15
+    /// 新音节从本卷最常用的前几个里挑（原来 6）。
+    public var newPickTop: Int = 12
     /// 刚错过一个，接下来几张出会的。
     public var afterMissKnown: Int = 2
     /// 打对率目标和统计窗口（张数）。
@@ -78,7 +81,7 @@ public struct LearningTuning: Codable, Sendable, Equatable {
 
     enum CodingKeys: String, CodingKey, CaseIterable {
         case firstFluentStart, fluentDays, fluentRecent, fluentStart, masterRecent, masterStart
-        case replayOffsets, reviewDays, mixKnown, mixNew, mixReview, mixFiller, newPerDuel, newGap, newPerDay
+        case replayOffsets, reviewDays, mixKnown, mixNew, mixReview, mixFiller, newPerDuel, newGap, newPerDay, newPickTop
         case afterMissKnown, successTarget, successWindow, recentWords
         case fluentDuels, masterDuels, newCardShare, knownSecondsPerLetter, speedWeight
         case openingBattles, openingTargetSeconds, openingMinHP
@@ -105,6 +108,7 @@ public struct LearningTuning: Codable, Sendable, Equatable {
         newPerDuel = try v(.newPerDuel, d.newPerDuel)
         newGap = try v(.newGap, d.newGap)
         newPerDay = try v(.newPerDay, d.newPerDay)
+        newPickTop = try v(.newPickTop, d.newPickTop)
         afterMissKnown = try v(.afterMissKnown, d.afterMissKnown)
         successTarget = try v(.successTarget, d.successTarget)
         successWindow = try v(.successWindow, d.successWindow)

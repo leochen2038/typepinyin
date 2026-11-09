@@ -28,7 +28,7 @@ import Testing
         }
     }
 
-    /// 每片地区排出的路：8–10 战（葫芦集 5 战），掌门前一站是群战，除葫芦集外有奇遇；对手和奇遇都是这片地区自己的。
+    /// 每片地区排出的路：8–10 战（葫芦集 6 战），掌门前一站是群战，除葫芦集外有奇遇；对手和奇遇都是这片地区自己的。
     @Test(arguments: TestContent.shared.regions.map(\.id)) func routeShape(_ id: String) {
         let r = c.region(id)!
         let foes = Set(r.foes.map(\.name))
@@ -36,11 +36,11 @@ import Testing
             let route = RoutePlanner.plan(region: r, content: c, seed: seed)
             let st = route.stations
             let fights = st.filter { $0.kind != .encounter }.count
-            #expect(id == "huluji" ? fights == 5 : (8...10).contains(fights), "\(r.name) \(seed) 打 \(fights) 战")
+            #expect((8...10).contains(fights), "\(r.name) \(seed) 打 \(fights) 战")
             #expect(st.last?.kind == .boss)
             #expect(st[st.count - 2].kind == .group)
             let enc = st.compactMap(\.encounterId)
-            #expect(id == "huluji" ? enc.isEmpty : !enc.isEmpty, "\(r.name) \(seed) 奇遇数不对")
+            #expect(!enc.isEmpty, "\(r.name) \(seed) 奇遇数不对")
             for e in enc { #expect(c.encounters.first { $0.id == e }?.regions.contains(id) == true, "\(r.name) 排到了别处的奇遇 \(e)") }
             for s in st where s.kind == .duel { #expect(foes.contains(s.foe?.name ?? ""), "\(r.name) 出现了别处的对手") }
         }

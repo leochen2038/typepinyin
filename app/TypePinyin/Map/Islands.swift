@@ -15,6 +15,12 @@ struct IslandView: View {
     var picked = false
     var bobDelay = 0.0
     var reduceMotion = false
+    /// 新画法：岛是长卷的缩小版（资源包里的图）；关掉回到原来的形状。
+    var useArt = true
+    /// 还没解锁：整座岛和地名灰掉（不透明，后面的路不会透出来）。
+    var locked = false
+    /// 岛最大放大多少（一座一层的新地图放大到约 1.3，岛约 150 点）。
+    var maxScale: CGFloat = 0.92
     @State private var bob = false
 
     /// 岛顶的颜色（没有美术图时用）。
@@ -28,19 +34,32 @@ struct IslandView: View {
     var body: some View {
         VStack(spacing: 0) {
             GeometryReader { g in
-                let s = min(g.size.width / 120, g.size.height / 104, 0.92)   // 岛宽最多约 110 点，岛和岛之间留出空
+                let s = min(g.size.width / 120, g.size.height / 104, maxScale)   // 九宫格岛宽最多约 110 点，岛和岛之间留出空
                 let w = 120 * s, h = 104 * s
                 ZStack(alignment: .topLeading) {
-                    if recent {
+                    if recent && !useArt {
                         Ellipse().fill(RadialGradient(colors: [Color(hex: 0xFFFBE9).opacity(0.95), Color(hex: 0xFFF6D8).opacity(0)],
                                                       center: .center, startRadius: 0, endRadius: 70 * s))
                             .frame(width: 140 * s, height: 92 * s).offset(x: -10 * s, y: 0)
                     }
                     art(s)
                         .frame(width: w, height: h)
-                    badge.scaleEffect(s).frame(width: 36, height: 36).position(x: 26 * s, y: 18 * s)
-                    if phase != .untouched && count > 0 {
-                        chip.fixedSize().position(x: 26 * s + 50, y: 12 * s)   // 圆章右上方、高一点、隔开一点
+                        .saturation(locked ? 0 : 1)
+                        .overlay(alignment: .bottom) {
+                            // 没解锁：盖一层天色。图比岛框高（底边对齐，高的建筑伸出框顶），盖色也往上多留一截，不然伸出去的那截没盖到、比下面深
+                            if locked {
+                                SkyBackground.flatSky.opacity(0.55)
+                                    .frame(width: w, height: h * 1.4)
+                                    .mask(alignment: .bottom) { art(s).frame(width: w, height: h) }
+                            }
+                        }
+                    if useArt {                                    // 新画法只留一块牌子，放在岛的右上方，不压建筑
+                        if showsTag && !locked { tag.position(x: w - 24 * s, y: -14 * s) }
+                    } else if !locked {
+                        badge.scaleEffect(s).frame(width: 36, height: 36).position(x: 26 * s, y: 18 * s)
+                        if phase != .untouched && count > 0 {
+                            chip.fixedSize().position(x: 26 * s + 50, y: 12 * s)   // 圆章右上方、高一点、隔开一点
+                        }
                     }
                 }
                 .frame(width: w, height: h)
@@ -48,7 +67,7 @@ struct IslandView: View {
                 .offset(y: bob ? -4 : 0)
                 .frame(width: g.size.width, height: g.size.height, alignment: .bottom)   // 岛贴着下面的地名
             }
-            Text(region.name).font(Fonts.display(18)).foregroundStyle(Palette.ink).lineLimit(1)
+            Text(region.name).font(Fonts.display(18)).foregroundStyle(locked ? Palette.faint : Palette.ink).lineLimit(1)
             if start { Text("起点").font(.system(size: 11, weight: .black)).foregroundStyle(Palette.red) }
         }
         .animation(.easeOut(duration: 0.2), value: picked)
@@ -57,14 +76,16 @@ struct IslandView: View {
             withAnimation(.easeInOut(duration: 3).repeatForever(autoreverses: true).delay(bobDelay.truncatingRemainder(dividingBy: 3))) { bob = true }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(region.name)，\(["未挑战", "挑战中", "已挑战"][phase == .untouched ? 0 : phase == .inProgress ? 1 : 2])\(phase != .untouched && count > 0 ? "，已集 \(count) 张词卡" : "")")
+        .accessibilityLabel(locked ? "\(region.name)，还没解锁" : "\(region.name)，\(["未挑战", "挑战中", "已挑战"][phase == .untouched ? 0 : phase == .inProgress ? 1 : 2])\(phase != .untouched && count > 0 ? "，已集 \(count) 张词卡" : "")")
         .accessibilityAddTraits(.isButton)
     }
 
     /// 岛身：有图用图，没图画形状。
     @ViewBuilder func art(_ s: CGFloat) -> some View {
-        if let img = UIImage(named: "island-\(region.id)") {
-            Image(uiImage: img).resizable().scaledToFit().padding(.top, 14 * s)
+        if useArt, let img = UIImage(named: "island-\(region.id)") {
+            // 画布比原来的岛高：底边对齐，高的建筑往上伸
+            Image(uiImage: img).resizable().frame(width: 104 * s / 0.92, height: 104 * s / 0.92)
+                .frame(width: 120 * s, height: 104 * s, alignment: .bottom)
         } else {
             ZStack {
                 IslandRock().fill(Color(hex: 0xB49A7A))
@@ -83,22 +104,28 @@ struct IslandView: View {
         }
     }
 
-    /// 圆章：拿到秘籍画这一卷的主题粒子，没拿到画灰问号；最后进去过的地区边是红的。
+    /// 新画法的牌子什么时候出现：拿到秘籍、最后去过、或者去过且有词卡。没去过的岛什么都不放。
+    var showsTag: Bool { obtained || recent || (phase != .untouched && count > 0) }
+
+    /// 新画法的牌子：拿到秘籍左边多一个主题图案；最后去过的那座岛红边。
+    var tag: some View {
+        HStack(spacing: 2) {
+            if obtained { RankFx.mark(region.volume).frame(width: 30, height: 30).scaleEffect(0.62).frame(width: 19, height: 19) }
+            Text("\(count)").font(.system(size: 13, weight: .black)).foregroundStyle(obtained ? Palette.red : Palette.ink)
+            Text("张").font(.system(size: 9, weight: .bold)).foregroundStyle(Palette.slate2)
+        }
+        .padding(.leading, obtained ? 3 : 7).padding(.trailing, 7).frame(height: 22)
+        .background(Capsule().fill(Color(hex: 0xFBF7EE)))
+        .overlay(Capsule().stroke(recent ? Palette.red : Palette.ink, lineWidth: recent ? 2 : 1.15))
+        .fixedSize()
+    }
+
+    /// 旧画法的圆章：拿到秘籍画这一卷的主题粒子，没拿到画灰问号；最后进去过的地区边是红的。
     var badge: some View {
         ZStack {
             Circle().fill(Color(hex: 0xFFF6E0))
             if obtained {
-                let k = RankFx.order.firstIndex(of: region.volume) ?? 0
-                if RankFx.theme(region.volume).kind == .confetti {   // 一片小纸条认不出：画三片
-                    ZStack {
-                        RankFx.symbol(1000 + k * 10, base: 1000).rotationEffect(.degrees(-20)).offset(x: -5, y: -4)
-                        RankFx.symbol(1000 + k * 10 + 1, base: 1000).rotationEffect(.degrees(25)).offset(x: 5, y: -2)
-                        RankFx.symbol(1000 + k * 10 + 2, base: 1000).rotationEffect(.degrees(-5)).offset(x: 0, y: 6)
-                    }
-                    .scaleEffect(0.85)
-                } else {
-                    RankFx.symbol(1000 + k * 10, base: 1000).scaleEffect(1.35)
-                }
+                RankFx.mark(region.volume)
             } else {
                 Text("?").font(.system(size: 15, weight: .black, design: .rounded)).foregroundStyle(Color(hex: 0x5C6178))
             }
@@ -172,7 +199,27 @@ struct IslandStrata: Shape {
 
 /// 天空和云海：上面淡蓝灰，往下渐渐变暖；几条云带。
 struct SkyBackground: View {
+    /// 新画法：天空平涂，底下一道黑边的云海（同长卷的云）；关掉回到渐变和半透明的云。
+    var flat = true
+    static let flatSky = Color(hex: 0xE9ECF2)
+
     var body: some View {
+        if flat {
+            GeometryReader { g in
+                ZStack(alignment: .bottom) {
+                    Self.flatSky
+                    CloudSea().fill(Color(hex: 0xFBF7EE)).overlay(CloudSea().stroke(Palette.ink, style: StrokeStyle(lineWidth: 1.15, lineJoin: .round)))
+                        .frame(width: g.size.width + 4, height: 126)
+                        .offset(y: 112)                    // 下面多伸一截，滚到底、回弹时都看不到云海的底边；也别顶到右下角练功房的字
+                }
+            }
+            .allowsHitTesting(false)
+        } else {
+            oldSky
+        }
+    }
+
+    private var oldSky: some View {
         GeometryReader { g in
             ZStack(alignment: .topLeading) {
                 LinearGradient(colors: [Color(hex: 0xE6EBF3), Color(hex: 0xEEF0F0), Color(hex: 0xF3ECDF), Color(hex: 0xEFE2C9)],
@@ -183,6 +230,25 @@ struct SkyBackground: View {
             }
         }
         .allowsHitTesting(false)
+    }
+}
+
+/// 地图底下的云海：一排大小相间的圆弧，平涂加黑边。
+struct CloudSea: Shape {
+    func path(in r: CGRect) -> Path {
+        var p = Path()
+        p.move(to: CGPoint(x: r.minX, y: r.maxY + 4))
+        p.addLine(to: CGPoint(x: r.minX, y: r.minY + 22))
+        var x = r.minX, k = 0
+        while x < r.maxX {
+            let w: CGFloat = k % 2 == 0 ? 58 : 40, rise: CGFloat = k % 2 == 0 ? 20 : 12
+            p.addCurve(to: CGPoint(x: x + w, y: r.minY + 22), control1: CGPoint(x: x + w * 0.1, y: r.minY + 22 - rise * 1.33),
+                       control2: CGPoint(x: x + w * 0.9, y: r.minY + 22 - rise * 1.33))
+            x += w; k += 1
+        }
+        p.addLine(to: CGPoint(x: x, y: r.maxY + 4))
+        p.closeSubpath()
+        return p
     }
 }
 
@@ -234,11 +300,27 @@ struct PeakArt: View {
 /// 练功房：右下角一枚圆印，里面一个木人桩，下面「练功房」和词卡总数。固定在屏幕上，不随地图动。
 struct PracticeSeal: View {
     let count: Int
+    /// 新画法：圆印 48 点，木人桩用拳场那个；关掉回到原来 58 点、圆头的木人桩。
+    var useArt = true
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             VStack(spacing: 2) {
+                if useArt {
+                    Image("practice-seal").resizable().frame(width: 52, height: 52)
+                } else {
+                    oldSeal
+                }
+                Text("练习场").font(Fonts.display(16)).foregroundStyle(Palette.ink)
+                Text("\(count) 张").font(.system(size: 11, weight: .bold)).foregroundStyle(Palette.slate)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("练习场，你的词卡 \(count) 张")
+    }
+
+    private var oldSeal: some View {
                 Canvas { ctx, size in
                     let s = size.width / 40
                     func r(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat) -> CGRect { CGRect(x: x * s, y: y * s, width: w * s, height: h * s) }
@@ -258,11 +340,5 @@ struct PracticeSeal: View {
                 .background(Circle().fill(Color(hex: 0xFFF6E0)))
                 .overlay(Circle().stroke(Palette.ink, lineWidth: 2.5))
                 .background(Circle().fill(Palette.ink).offset(x: 3, y: 3))
-                Text("练功房").font(Fonts.display(16)).foregroundStyle(Palette.ink)
-                Text("\(count) 张").font(.system(size: 11, weight: .bold)).foregroundStyle(Palette.slate)
-            }
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("练功房，你的词卡 \(count) 张")
     }
 }

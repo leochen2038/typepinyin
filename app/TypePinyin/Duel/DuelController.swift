@@ -61,7 +61,7 @@ final class DuelController {
     private(set) var movesPerDuel = 10
     private(set) var nearMissToast = 0
     private(set) var finaleBanner = false
-    /// 打空对手血条的那一刀落下时，屏幕上打出「绝杀！」。
+    /// 打空对手血条的那一刀落下时，屏幕上打出「承让！」。
     private(set) var killBanner = false
     @ObservationIgnored private var grabSeq = 0
     /// 取字：主角用空着的后手把刚按的字母从键上取回来（剑气或绳镖，界面层负责画）。时间都用 Date 的钟，和 TimelineView 一致。
@@ -236,8 +236,12 @@ final class DuelController {
         var guided = false
         /// 对手丢一条命站起来时说的话（按丢命的顺序；空 = 通用的几句）。
         var lifeLines: [String] = []
-        /// 比武背景用哪片地区的长卷、第几站（nil = 切片的深蓝底）。
-        var backdrop: (region: String, station: Int)?
+        /// 群战按出场顺序每个人是谁（武林大会的十位掌门）；nil = 按等级的喽啰、镖师、头目。
+        var groupNames: [String]?
+        /// 群战按出场顺序每个人被打倒时说的话；nil = 不说。
+        var groupLines: [String]?
+        /// 比武背景用哪片地区的长卷、这一趟共几站里的第几站（nil = 切片的深蓝底）。
+        var backdrop: (region: String, station: Int, count: Int)?
         /// 这一场是掌门站（比武背景停在掌门的位置）。
         var backdropBoss = false
         /// 引擎事件（入门提示用）。
@@ -267,6 +271,8 @@ final class DuelController {
     /// 教学引导：第一张牌跟着亮起来的键按。说明跟着按键一步一步出：一句眼前这一步，必要时再加一句。
     var guide: (title: String, line: String?)?
     @ObservationIgnored private var guiding = false
+    /// 正在引导的那个词。打完它，第一张牌马上换成下一个词，引导不跟过去。
+    @ObservationIgnored private var guideWord: String?
     /// 引导已经画到键盘上了（开打时键盘可能还没接上，接上后的第一帧补画）。
     @ObservationIgnored private var guideOnKeyboard = false
 
@@ -312,6 +318,7 @@ final class DuelController {
     func start() {
         // 演示用（-demoMoves N）：一场只打 N 招，模拟器上很快就能看到最后的必杀
         if UserDefaults.standard.object(forKey: "demoMoves") != nil { tuning.movesPerDuel = UserDefaults.standard.integer(forKey: "demoMoves") }
+        if UserDefaults.standard.object(forKey: "demoFinisherFx") != nil { tuning.finisherFx = UserDefaults.standard.integer(forKey: "demoFinisherFx") }   // 演示用：-demoFinisherFx 0/1
         if let p = plan {
             let seed = UInt64(Date().timeIntervalSince1970 * 1000)
             var t = tuning
@@ -329,13 +336,16 @@ final class DuelController {
         sounds.hapticsOn = true
         scene.groupEnd()                          // 先换回单挑的对手，再换衣服
         scene.newArt = tuning.artStyle == 1
-        scene.setFoe(robe: plan?.robe ?? robes[round % robes.count])
-        scene.setBackdrop(regionId: plan?.backdrop?.region, station: plan?.backdrop?.station ?? 0, boss: plan?.backdropBoss ?? false)
+        scene.newFigures = tuning.figureStyle == 1
+        scene.showAura = tuning.comboAura
+        scene.setFoe(name: plan?.foeName ?? engine.opponent.name, robe: plan?.robe ?? robes[round % robes.count])
+        scene.setBackdrop(regionId: plan?.backdrop?.region, station: plan?.backdrop?.station ?? 0, count: plan?.backdrop?.count ?? 1, boss: plan?.backdropBoss ?? false)
         scene.speed = 1 / Self.fxSlow            // -slowfx：人物动作也一起放慢
         scene.reset()
         scene.groupFinisherStyle = tuning.groupFinisherStyle
         scene.anticipation = tuning.anticipation
         scene.finisherFreeze = tuning.finisherFreeze
+        scene.slashFx = tuning.finisherFx == 1
         scene.onFreeze = { [weak self] secs in
             guard let self else { return }
             self.freeze(secs, caption: self.finisherText)
@@ -352,13 +362,13 @@ final class DuelController {
         shownGroupHP = [:]
         pendingWin = false
         movesPerDuel = tuning.movesPerDuel
-        music.setLevel(0)
         keyboard?.showHint(nil)
         scene.setCharge(0)
         let ev = engine.start(at: CACurrentMediaTime())
         if AppResources.isUITest { setUITestOpponent() }
         if plan != nil && JourneyFlags.fast { engine.debugSetOpponentHP(12) }      // 跳过动画：一两招就打完
         guiding = plan?.guided == true
+        guideWord = nil
         if guiding { updateGuide() }
         apply(ev)
         sync()
@@ -524,6 +534,11 @@ final class DuelController {
     // MARK: - 取字（剑气 / 绳镖）
 
     private var isQi: Bool { tuning.grabStyle == 0 }
+    /// 正在打的是不是必杀牌。
+    private var typingFinisher: Bool {
+        if case .card(let i) = engine.target, engine.cards.indices.contains(i) { return engine.cards[i].isFinisher }
+        return false
+    }
     private static func bend() -> Double { Double.random(in: 0.35...1) * (Bool.random() ? 1 : -1) }
 
     /// 每个字母取一次。绳镖：后手甩出去钩回来；剑气：字母自己化成剑气打进主角身上，人不用动。
@@ -532,12 +547,13 @@ final class DuelController {
         let g = Grab(id: grabSeq, letter: letter, start: Date().timeIntervalSinceReferenceDate, bend: Self.bend())
         grabs.append(g)
         let qi = isQi
+        let finisher = typingFinisher                       // 现在记下：字母飞到时这张牌可能已经打完了
         if !qi { scene.throwDart(wind: Self.rope.wind, out: Self.rope.out, hold: Self.rope.hold, back: Self.rope.back) }
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(qi ? Self.qiCharge + Self.qiFly : Self.grabFlight))
             self.grabs.removeAll { $0.id == g.id }
             if qi { self.scene.bodyAbsorb(big: false) } else { self.scene.handFlash() }
-            if k < 1 { self.scene.setCharge(k) }
+            if k < 1 { self.scene.setCharge(k, finisher: finisher) }
         }
     }
 
@@ -574,14 +590,14 @@ final class DuelController {
         let now = Date().timeIntervalSinceReferenceDate
         let at = max(now, chains[j].hooks.last!.at) + Self.ropeHold
         chains[j].yankAt = at
-        let id = chains[j].id, qi = isQi
+        let id = chains[j].id, qi = isQi, finisher = typingFinisher
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(at - now))
             if !qi { self.scene.yankDart(back: Self.rope.reel) }
             try? await Task.sleep(for: .seconds(qi ? Self.qiMerge + Self.qiFly : Self.chainBack))
             self.chains.removeAll { $0.id == id }
             if qi { self.scene.bodyAbsorb(big: true) } else { self.scene.handFlash(big: true) }
-            if let k, k < 1 { self.scene.setCharge(k) }
+            if let k, k < 1 { self.scene.setCharge(k, finisher: finisher) }
         }
     }
 
@@ -595,7 +611,7 @@ final class DuelController {
         for e in events {
             switch e {
             case .foeJoined(let id, let tier, let slot):
-                if !inStrike { scene.groupAdd(id: id, tier: tier.rawValue, slot: slot, walkIn: false) }
+                if !inStrike { scene.groupAdd(id: id, tier: tier.rawValue, slot: slot, walkIn: false, name: groupName(id)) }
             case .foeDefeated(let id):
                 if !inStrike { scene.groupDown(id) }
             case .foeAttacked(let id, let dmg):
@@ -652,7 +668,7 @@ final class DuelController {
                     qiReady = false; qiTransferred = false; finisherSealed = false
                     finisherText = lastCards[i]?.text ?? ""
                 }
-                scene.setCharge(1)
+                scene.setCharge(1, finisher: finisher)
                 let letters = (lastStruck[i] ?? "").map(String.init)
                 let n = max(1, letters.count)
                 reviewSeq += 1
@@ -680,7 +696,7 @@ final class DuelController {
                 let joined = engine.foes.filter { engine.lastJoined.contains($0.id) }
                 let livesLeft = engine.opponent.lives
                 if lifeLost { knockdownHold = true }            // 血条先停在空的
-                let big = lethal || lifeLost                    // 打空一条血：照绝杀的冲击来，但不出「绝杀！」
+                let big = lethal || lifeLost                    // 打空一条血：照最后一刀的冲击来，但不出「承让！」
                 hpFrom = (Double(foeHP), shownGroupHP)
                 hpTo = (lifeLost ? 0 : Double(max(0, engine.opponent.hp)), groupHPNow())
                 hpProgress = 0
@@ -723,10 +739,11 @@ final class DuelController {
                             }
                         }
                         if last && group {
+                            for id in downed { if let line = self.groupLine(id) { self.scene.groupSay(id, line: line) } }
                             self.scene.groupDownAll(downed)
                             Task { @MainActor in
                                 try? await Task.sleep(for: .seconds(0.4))
-                                for f in joined { self.scene.groupAdd(id: f.id, tier: f.tier.rawValue, slot: f.slot, walkIn: true) }
+                                for f in joined { self.scene.groupAdd(id: f.id, tier: f.tier.rawValue, slot: f.slot, walkIn: true, name: self.groupName(f.id)) }
                             }
                         }
                         if last && lifeLost {                           // 丢一条命：熄一块、跪地，站起来说句话、血条换色满上
@@ -783,6 +800,7 @@ final class DuelController {
                 if strikesInFlight > 0 && !AppResources.isUITest { pendingWin = true } else { win() }
             case .lost:
                 scene.playerDown()
+                music.stop()
                 endAfterBeat()
             case .cardDealt(let i):
                 // 新牌没被回顾盖住（比如这招没生成回顾牌）：马上算露出来，别让它一直等着不计时
@@ -804,6 +822,12 @@ final class DuelController {
     /// 教学引导：亮出第一张牌下一个该按的键、画左右手分界线；说明按打到哪一步来，一次只说一点。
     private func updateGuide() {
         guard guiding, let card = engine.cards.first else { return }
+        if guideWord == nil { guideWord = card.word.text }
+        guard card.word.text == guideWord else {
+            keyboard?.showHint(nil)
+            keyboard?.showThumb(nil)
+            return
+        }
         guide = Self.guideText(word: card.word, typed: card.typed.count)
         let letters = Array(card.word.letters)
         let next = card.typed.count < letters.count ? letters[card.typed.count] : nil
@@ -837,6 +861,7 @@ final class DuelController {
 
     private func endGuide() {
         guiding = false
+        guideWord = nil
         guideOnKeyboard = false
         guide = nil
         keyboard?.guide = false
@@ -859,6 +884,7 @@ final class DuelController {
     private func win() {
         scene.foeDown()
         sounds.play(.win)
+        music.stop()
         endAfterBeat()
     }
 
@@ -888,7 +914,6 @@ final class DuelController {
     private func finish() {
         heat = 0
         scene.setHeat(0)
-        music.setLevel(0)
         if let p = plan, let s = engine.summary { p.onFinish(s, engine.attempts, engine.player.secondsPerLetter) }
         clearQi()                                         // 结算时就清掉，下一场的画面出来时气条已经是空的
         summary = engine.summary
@@ -897,6 +922,13 @@ final class DuelController {
     }
 
     /// 群战每个人现在（引擎里）的血，0–1。
+    /// 群战第几个上场的（引擎里的 id 从 1 数）是谁、被打倒时说什么。
+    private func groupName(_ id: Int) -> String? { plan?.groupNames.flatMap { id - 1 < $0.count && id >= 1 ? $0[id - 1] : nil } }
+    private func groupLine(_ id: Int) -> String? { plan?.groupLines.flatMap { id - 1 < $0.count && id >= 1 ? $0[id - 1] : nil } }
+
+    /// 群战现在台上的人（按出场顺序从 0 数），武林大会按它出台上这几位掌门那几关的词。
+    var groupOnStage: [Int] { engine.foes.map { $0.id - 1 } }
+
     private func groupHPNow() -> [Int: Double] {
         Dictionary(uniqueKeysWithValues: engine.foes.map { ($0.id, Double(max(0, $0.hp)) / Double(max(1, $0.maxHP))) })
     }
@@ -942,7 +974,7 @@ final class DuelController {
         set(\.foeMaxHP, engine.opponent.maxHP)
         set(\.foeMaxLives, engine.opponent.maxLives)
         if !knockdownHold && strikesInFlight == 0 { set(\.foeLives, engine.opponent.lives) }   // 开场、重开：直接对上
-        set(\.foeName, engine.opponent.name)
+        set(\.foeName, scene.groupMode && plan?.groupNames != nil ? "十位掌门" : engine.opponent.name)   // 武林大会的群战写「十位掌门」
         set(\.foeTitle, engine.opponent.title)
         let st = engine.opponent.isStunned(at: engine.gameClock)
         if st != stunned { stunned = st; if !st { scene.stunEnded() } }

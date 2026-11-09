@@ -4,13 +4,19 @@ import SwiftUI
 struct OpeningView: View {
     let line: String
     var button: String = "开始"
+    /// 开场白上面的一张图（素材名），没有就只有字。
+    var image: String? = nil
+    var fontSize: CGFloat = 34
     let onDone: () -> Void
     @State private var shown = false
 
     var body: some View {
         VStack(spacing: 36) {
+            if let image {
+                Image(image).resizable().scaledToFit().frame(width: 220)
+            }
             Text(line)
-                .font(Fonts.display(34))
+                .font(Fonts.display(fontSize))
                 .foregroundStyle(Palette.ink)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)

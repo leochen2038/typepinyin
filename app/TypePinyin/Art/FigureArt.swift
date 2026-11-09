@@ -17,6 +17,16 @@ enum FigureArt {
     struct Part {
         var shapes: [Shape]
         var pivot: CGPoint
+        /// 定稿画法：部件是资源包里的一张图（box 是这张图在骨骼坐标里的位置），shapes 为空。
+        var asset: String? = nil
+        var box: CGRect = .null
+
+        var bounds: CGRect {
+            if asset != nil { return box }
+            var b = CGRect.null
+            for s in shapes { b = b.union(s.path.boundingBoxOfPath.insetBy(dx: -s.width / 2 - 2, dy: -s.width / 2 - 2)) }
+            return b
+        }
     }
 
     struct Figure {
@@ -27,7 +37,44 @@ enum FigureArt {
         var frontArm: Part
         /// 贴图缓存的键（正式美术按外形生成；旧画法为空，每次重画）。
         var key: String? = nil
+        /// 背后的东西（镖旗、披风、发带……）：跟着身子走，压在所有部件下面。
+        var back: Part? = nil
+        /// 身后一层错位影（定稿的套色印刷感）。
+        var printShadow = false
+        /// 剑柄、剑尖（前臂部件的坐标，y 向上）和后手（后臂部件的坐标），特效从这里出。默认值是旧画法的。
+        var swordHilt = CGPoint(x: 55, y: -2)
+        var swordTip = CGPoint(x: 114, y: 12)
+        var backHand = CGPoint(x: -28, y: 25)
+
+        /// 从下到上的画法顺序。
+        var layers: [Part] { [back].compactMap { $0 } + [backArm, backLeg, frontLeg, body, frontArm] }
     }
+
+    /// 定稿画法的人物（FigureCatalog 里的一项）。
+    static func catalog(_ id: String) -> Figure {
+        guard let e = FigureCatalog.entries[id] else { return catalog("biaoshi") }
+        func part(_ i: FigureCatalog.PartInfo?) -> Part {
+            guard let i else { return Part(shapes: [], pivot: .zero) }
+            return Part(shapes: [], pivot: i.pivot, asset: i.asset, box: i.box)
+        }
+        return Figure(backArm: part(e.backArm), backLeg: part(e.backLeg), frontLeg: part(e.frontLeg), body: part(e.body), frontArm: part(e.frontArm),
+                      key: id, back: e.back.map { part($0) }, printShadow: true)
+    }
+
+    /// 主角（定稿）。剑柄、剑尖、后手从定稿的坐标换算：x = (x - 440) / 4，部件原点在肩上；前臂已绕肩压低 20 度。
+    static func hero() -> Figure {
+        var f = catalog("hero")
+        f.swordHilt = CGPoint(x: 54.7, y: 4.05)
+        f.swordTip = CGPoint(x: 106.7, y: 27.85)
+        f.backHand = CGPoint(x: -23, y: 38.75)
+        return f
+    }
+
+    /// 对手：名字在表里就用他自己的样子，切片比武里的陈二、金三这种不在表里的用镖师。
+    static func foe(named name: String?) -> Figure { catalog(name.flatMap { FigureCatalog.idByName[$0] } ?? "biaoshi") }
+
+    /// 群战的三等敌人。
+    static func tier(_ t: Int) -> Figure { catalog(["louluo", "biaoshi", "toumu"][min(2, max(0, t))]) }
 
     static let ink = UIColor(hex: 0x111111)
     static let skin = UIColor(hex: 0xFFE2C2)
@@ -174,11 +221,10 @@ enum FigureArt {
         }
     }
 
-    /// 整个人站着的样子画成一张图（画廊页、长卷上的小人用）。
+    /// 整个人站着的样子画成一张图（画廊页用）。
     static func image(_ f: Figure, height: CGFloat, silhouette: Bool = false) -> UIImage {
-        let all = [f.backArm, f.backLeg, f.frontLeg, f.body, f.frontArm].flatMap(\.shapes)
         var box = CGRect.null
-        for s in all { box = box.union(s.path.boundingBoxOfPath.insetBy(dx: -s.width / 2 - 2, dy: -s.width / 2 - 2)) }
+        for p in f.layers where !(p.asset == nil && p.shapes.isEmpty) { box = box.union(p.bounds) }
         let k = height / box.height
         let format = UIGraphicsImageRendererFormat()
         format.opaque = false
@@ -186,12 +232,24 @@ enum FigureArt {
             let g = ctx.cgContext
             g.scaleBy(x: k, y: k)
             g.translateBy(x: -box.minX, y: -box.minY)
-            draw(all, in: g, silhouette: silhouette)
+            for p in f.layers {
+                if let a = p.asset, var img = UIImage(named: a) {
+                    if silhouette { img = img.withTintColor(ink, renderingMode: .alwaysOriginal) }
+                    img.draw(in: p.box)
+                } else {
+                    draw(p.shapes, in: g, silhouette: silhouette)
+                }
+            }
         }
     }
 
     @MainActor
     static func texture(for part: Part, scale: CGFloat = 3) -> (SKTexture, CGPoint, CGSize) {
+        if let a = part.asset, let img = UIImage(named: a) {
+            let b = part.box
+            let anchor = CGPoint(x: (part.pivot.x - b.minX) / b.width, y: 1 - (part.pivot.y - b.minY) / b.height)
+            return (SKTexture(image: img), anchor, b.size)
+        }
         var box = CGRect.null
         for s in part.shapes {
             let pad = s.width / 2 + 2
@@ -216,6 +274,7 @@ enum FigureArt {
 /// 拼装好的人物节点：可以待机、出招、受击、倒地。
 @MainActor
 final class FigureNode: SKNode {
+    let backItems = SKSpriteNode()
     let backArm = SKSpriteNode()
     let backLeg = SKSpriteNode()
     let frontLeg = SKSpriteNode()
@@ -225,26 +284,48 @@ final class FigureNode: SKNode {
     /// 包在 rig 外面的一层，只做预备动作的退、压扁、后仰（rig 自己的位置和转角归待机呼吸、晕眩用）。
     private let pose = SKNode()
 
+    /// 剑柄、剑尖（前臂坐标），后手（后臂坐标）。
+    let swordHilt: CGPoint
+    let swordTip: CGPoint
+    let backHand: CGPoint
+
     init(_ figure: FigureArt.Figure) {
+        swordHilt = figure.swordHilt
+        swordTip = figure.swordTip
+        backHand = figure.backHand
         super.init()
         // 脚下的影子：贴着地，不跟身体一起晃（在 rig 外面），让人看得出是站在地上
         let shadow = SKSpriteNode(texture: Self.shadowTexture)
-        shadow.size = CGSize(width: 116, height: 16)
+        shadow.size = CGSize(width: figure.printShadow ? 140 : 116, height: 16)  // 定稿的人两脚分得开，影子也宽一点；身上已有错位影，地上的淡一点
+        shadow.alpha = figure.printShadow ? 0.6 : 1
         shadow.position = CGPoint(x: 0, y: 1)
         shadow.zPosition = -1
         addChild(shadow)
         addChild(pose)
         pose.addChild(rig)
-        for (k, (node, part)) in [(backArm, figure.backArm), (backLeg, figure.backLeg), (frontLeg, figure.frontLeg),
-                                  (bodyPart, figure.body), (frontArm, figure.frontArm)].enumerated() {
+        let parts: [(SKSpriteNode, FigureArt.Part?)] = [(backItems, figure.back), (backArm, figure.backArm), (backLeg, figure.backLeg),
+                                                        (frontLeg, figure.frontLeg), (bodyPart, figure.body), (frontArm, figure.frontArm)]
+        for (k, (node, part)) in parts.enumerated() {
+            guard let part, part.asset != nil || !part.shapes.isEmpty else { continue }
             let (tex, anchor, size) = Self.texture(part, key: figure.key.map { "\($0)#\(k)" })
             node.texture = tex
             node.size = size
             node.anchorPoint = anchor
             node.position = CGPoint(x: part.pivot.x, y: -part.pivot.y)
+            node.zPosition = CGFloat(k + 1) * 0.1                  // 场景不按添加顺序画，层次要写明
             rig.addChild(node)
+            if figure.printShadow && node !== frontArm {           // 错位影：同一张图染成深蓝，压在所有部件下面。前臂不要：兵器很细，影子和剑身差不多宽，剑看着半白半深蓝
+                let s = SKSpriteNode(texture: tex, color: Self.printColor, size: size)
+                s.colorBlendFactor = 1
+                s.anchorPoint = anchor
+                s.position = CGPoint(x: 2.25, y: -2.25)
+                s.zPosition = -1
+                node.addChild(s)
+            }
         }
     }
+
+    private static let printColor = UIColor(hex: 0x0B1433)
 
     required init?(coder: NSCoder) { fatalError() }
 
@@ -256,7 +337,10 @@ final class FigureNode: SKNode {
         let started = CACurrentMediaTime()
         let made = FigureArt.texture(for: part)
         if key != nil { SceneRenderer.log("人物部件", since: started) }
-        if let key { textureCache[key] = made }
+        if let key {
+            if textureCache.count >= 48 { textureCache.removeAll() }   // 一次留八个人左右，全留着太占内存；正在用的贴图精灵自己拿着
+            textureCache[key] = made
+        }
         return made
     }
 
@@ -287,13 +371,34 @@ final class FigureNode: SKNode {
     }
 
     private var swordGlow: SKShapeNode?
+    private var swordCut: SKSpriteNode?
+
+    /// 刀痕一套的剑：剑身上长出一道两头尖的红色刀痕，k 是长到剑身的几成（0 = 收起）。只给玩家用。
+    func setSwordCut(_ k: CGFloat, texture: SKTexture) {
+        guard k > 0 || swordCut != nil else { return }
+        let dx = swordTip.x - swordHilt.x, dy = swordTip.y - swordHilt.y
+        if swordCut == nil {
+            let s = SKSpriteNode(texture: texture)
+            s.anchorPoint = CGPoint(x: 0, y: 0.5)
+            s.position = swordHilt
+            s.zRotation = atan2(dy, dx)
+            s.zPosition = 1
+            s.xScale = 0
+            s.yScale = 0.45
+            frontArm.addChild(s)
+            swordCut = s
+        }
+        let full = hypot(dx, dy) * 1.2 / texture.size().width       // 比剑身长一点，盖住剑尖
+        swordCut?.removeAllActions()
+        swordCut?.run(.scaleX(to: k * full, duration: k > 0 ? 0.1 : 0.08))
+    }
 
     /// 剑上的气：0 = 没有，1 = 最亮。只给玩家用（剑在前手部件上，跟着手转）。
     func setSwordGlow(_ k: CGFloat, color: UIColor) {
         if swordGlow == nil {
             let g = SKShapeNode()
             let p = CGMutablePath()
-            p.move(to: Self.swordHilt); p.addLine(to: Self.swordTip)   // 剑身（前手部件的坐标）
+            p.move(to: swordHilt); p.addLine(to: swordTip)   // 剑身（前手部件的坐标）
             g.path = p
             g.lineCap = .round
             g.zPosition = 1
@@ -316,13 +421,6 @@ final class FigureNode: SKNode {
         g.alpha = k <= 0 ? 0 : 0.35 + 0.65 * k
     }
 
-    /// 剑柄和剑尖（前手部件的坐标），从 player() 里剑身那条线 M 65 -110 L 124 -124 换算：
-    /// 原点在部件支点 (10, -112)，y 轴翻成向上。
-    static let swordHilt = CGPoint(x: 65 - 10, y: -(-110 + 112))
-    static let swordTip = CGPoint(x: 124 - 10, y: -(-124 + 112))
-    /// 空着的后手（后手部件的坐标），从 player() 里的手 circle(-38, -141) 换算，支点 (-10, -116)。绳镖从这里甩出、收回。
-    static let backHand = CGPoint(x: -38 + 10, y: -(-141 + 116))
-
     /// 绳镖：后手往后一扬（wind），往前甩出（out），停住（hold）；back > 0 时接着往回一拽再放松。
     func throwDart(wind: Double, out: Double, hold: Double, back: Double) {
         backArm.removeAction(forKey: "dart")
@@ -342,7 +440,7 @@ final class FigureNode: SKNode {
         let f = SKShapeNode(circleOfRadius: big ? 11 : 8)
         f.fillColor = color
         f.strokeColor = .clear
-        f.position = Self.backHand
+        f.position = backHand
         f.zPosition = 2
         backArm.addChild(f)
         f.run(.sequence([.group([.scale(to: big ? 2.8 : 2.2, duration: 0.18), .fadeOut(withDuration: 0.18)]), .removeFromParent()]))
@@ -452,7 +550,7 @@ final class FigureNode: SKNode {
     func hurt(reduced: Bool) {
         let flash = SKAction.sequence([.colorize(with: .white, colorBlendFactor: 0.8, duration: 0.02), .wait(forDuration: 0.06),
                                        .colorize(withColorBlendFactor: 0, duration: 0.12)])
-        for n in [backArm, backLeg, frontLeg, bodyPart, frontArm] { n.run(flash) }
+        for n in [backItems, backArm, backLeg, frontLeg, bodyPart, frontArm] { n.run(flash) }
         guard !reduced else { return }
         run(.sequence([.moveBy(x: -10, y: 0, duration: 0.04), .moveBy(x: 12, y: 0, duration: 0.06), .moveBy(x: -2, y: 0, duration: 0.05)]))
     }

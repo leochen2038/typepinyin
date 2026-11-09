@@ -47,6 +47,37 @@ final class SoundFX {
         voices.forEach { $0.play() }
         [light, heavy, rigid].forEach { $0.prepare() }
         notice.prepare()
+        // 来电结束、回到前台、耳机插拔：引擎被系统停了就接回来，不等下一个音效
+        let center = NotificationCenter.default
+        observers = [center.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { [weak self] note in
+                         guard let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+                               AVAudioSession.InterruptionType(rawValue: raw) == .ended else { return }
+                         MainActor.assumeIsolated { self?.revive() }
+                     },
+                     center.addObserver(forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main) { [weak self] _ in
+                         MainActor.assumeIsolated { self?.revive() }
+                     },
+                     center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+                         MainActor.assumeIsolated { self?.revive() }
+                     }]
+    }
+
+    private var observers: [NSObjectProtocol] = []
+
+    private func revive() {
+        let engine = engine, voices = voices
+        queue.async { Self.recover(engine, voices) }
+    }
+
+    /// 把停掉的引擎接回来。引擎被停以后声部还以为自己在播（isPlaying 是 true），只重启引擎或只调 play 都没有声音，
+    /// 要先 stop 再 play（这就是来电以后配乐还在、音效没了的原因：配乐不走这个引擎）。
+    private nonisolated static func recover(_ engine: AVAudioEngine, _ voices: [AVAudioPlayerNode]) {
+        guard !engine.isRunning else { return }
+        try? AVAudioSession.sharedInstance().setActive(true)
+        voices.forEach { $0.stop() }
+        engine.prepare()
+        guard (try? engine.start()) != nil else { return }       // 电话还没挂也会失败，下一个音效或下一次通知再试
+        voices.forEach { $0.play() }
     }
 
     /// 同一个词里第 i 个字母：音调一个比一个高。
@@ -59,10 +90,11 @@ final class SoundFX {
         guard soundOn, let buf = buffers[s], !voices.isEmpty else { return }
         let v = voices[nextVoice % voices.count]
         nextVoice += 1
-        let engine = engine
+        let engine = engine, voices = voices
         PerfLog.measure("播放音效") {
             queue.async {
-                if !engine.isRunning { try? engine.start() }       // 来电、切后台之后引擎可能停了
+                Self.recover(engine, voices)                       // 来电、切后台之后引擎可能停了
+                guard engine.isRunning else { return }             // 还接不回来（比如电话没挂）：这一声先不放，不然会崩
                 v.scheduleBuffer(buf, at: nil, options: .interrupts)
                 if !v.isPlaying { v.play() }
             }

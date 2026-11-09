@@ -26,6 +26,11 @@ extension DuelEngine {
     // MARK: 锁定
 
     func lock(_ c: Character) {
+        // 按的不是亮着的那个字母（自己挑了别的牌，或提示已经熄灭）：这一招不算看过提示
+        if currentHint != c {
+            hintedBeforeLock = false
+            hintPendingFirst = false
+        }
         if let inc = opponent.incoming, inc.word.firstLetter == c {
             target = .incoming
             beginTarget(readyFrom: inc.startedAt)
@@ -54,15 +59,23 @@ extension DuelEngine {
         firstLetterWrong()
     }
 
-    /// 第一个字母就对不上任何牌：跟拼错一样扣一点血、断连招（教学牌除外）。不知道想打哪张，不记到音节上。
+    /// 第一个字母就对不上任何牌：跟拼错一样扣一点血、断连招（教学牌除外），键盘上亮出该按的字母。
+    /// 不知道想打哪张，不记到音节上；亮哪张牌的字母和卡住时的顺序一样：先来招，再有破绽的牌，再第一张。
+    /// 看过提示的这一招不算完美，和拼错时一样。
     func firstLetterWrong() {
         guard !(setup.firstCardFree && moveMarks.isEmpty) else { return }
-        guard cards.contains(where: { !$0.inactive }) || opponent.incoming != nil else { return }
+        let next = opponent.incoming?.word ?? (cards.first { $0.hasFlaw && !$0.inactive } ?? cards.first { !$0.inactive })?.word
+        guard let next else { return }
         let dmg = tuning.mistakeDamage
         let dead = hurtPlayer(dmg)
         emit(.mistake("", damage: dmg))
         breakCombo()
-        if dead { finish(won: false) }
+        if dead { finish(won: false); return }
+        hintNow(word: next, typed: 0)
+        if currentHint != nil {
+            hintedBeforeLock = true
+            hintPendingFirst = true
+        }
     }
 
     func beginTarget(readyFrom: Double) {

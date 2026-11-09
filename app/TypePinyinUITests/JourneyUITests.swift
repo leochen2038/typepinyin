@@ -14,21 +14,24 @@ final class JourneyUITests: XCTestCase {
 
     func testOpeningToShilipoAndResume() {
         var app = launch(reset: true)
-        XCTAssertTrue(app.descendants(matching: .any)["guide"].waitForExistence(timeout: 15), "梦里第一张牌有教学引导")
-        XCTAssertTrue(app.descendants(matching: .any)["mapGuide"].waitForExistence(timeout: 120), "梦醒后到江湖地图，引导点葫芦集")
+        XCTAssertTrue(app.descendants(matching: .any)["mapGuide"].waitForExistence(timeout: 60), "开场白之后到江湖地图，引导点葫芦集")
+        XCTAssertTrue(app.descendants(matching: .any)["stele"].waitForExistence(timeout: 60), "第一次进葫芦集，门口先打葫芦集碑，不比武")
         XCTAssertTrue(app.buttons["backToMap"].waitForExistence(timeout: 30), "进到葫芦集")
         XCTAssertTrue(app.buttons["挑战"].waitForExistence(timeout: 30), "到了一站先问挑战还是返回")
         XCTAssertFalse(app.staticTexts["失败"].exists)
         app.terminate()
-        app = launch(reset: false)
+        // 这回不自动打：-autoplay 会马上开打，比武和结算要十几秒，顶栏的 backToMap 那时候不在
+        app = XCUIApplication()
+        app.launchArguments = ["-uiTestMode", "-fastJourney"]
+        app.launch()
         XCTAssertTrue(app.buttons["backToMap"].waitForExistence(timeout: 15), "再打开回到葫芦集，不再从开场白开始")
         XCTAssertFalse(app.staticTexts["openingLine"].exists)
     }
 
-    /// 练功房：梦里打过的词进了练功房；从地图点进去，先问挑战，挑战后开打。
-    func testPracticeRoomUsesWordsTyped() {
+    /// 练习场：还没比过武时「词语」是空的；「文章」里有葫芦集的诗文，点开一句句打，「返回」回到练习场。
+    func testPracticeRoomBeforeFirstDuel() {
         var app = launch(reset: true)
-        XCTAssertTrue(app.buttons["挑战"].waitForExistence(timeout: 120), "打完梦，进到葫芦集第一站")
+        XCTAssertTrue(app.buttons["挑战"].waitForExistence(timeout: 120), "打完葫芦集碑，进到葫芦集第一站")
         app.terminate()
         app = XCUIApplication()
         app.launchArguments = ["-uiTestMode", "-fastJourney"]
@@ -36,12 +39,16 @@ final class JourneyUITests: XCTestCase {
         XCTAssertTrue(app.buttons["返回"].waitForExistence(timeout: 15))
         app.buttons["返回"].tap()
         let room = app.descendants(matching: .any)["place-chuRuJiangHu"]
-        XCTAssertTrue(room.waitForExistence(timeout: 10), "地图最下面是练功房")
+        XCTAssertTrue(room.waitForExistence(timeout: 10), "地图最下面是练习场")
         room.tap()
-        let count = app.staticTexts.containing(NSPredicate(format: "label BEGINSWITH '这里有你打过的'")).firstMatch
-        XCTAssertTrue(count.waitForExistence(timeout: 10), "练功房里有梦里打过的词")
-        XCTAssertTrue(app.buttons["挑战"].exists)
-        app.buttons["挑战"].tap()
-        XCTAssertFalse(app.buttons["挑战"].waitForExistence(timeout: 3), "挑战后进比武")
+        XCTAssertTrue(app.staticTexts["这里还没有词"].waitForExistence(timeout: 10), "还没比过武，词语是空的")
+        app.descendants(matching: .any)["practiceTab-1"].firstMatch.tap()
+        let passage = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'passage-'")).firstMatch
+        XCTAssertTrue(passage.waitForExistence(timeout: 5), "文章里有葫芦集的诗文")
+        passage.tap()
+        XCTAssertTrue(app.buttons["返回"].waitForExistence(timeout: 5), "打字页顶上有返回")
+        app.buttons["返回"].tap()
+        XCTAssertTrue(passage.waitForExistence(timeout: 5), "返回到练习场的文章")
     }
+
 }

@@ -48,15 +48,14 @@ struct ArtGalleryView: View {
                 }
                 Text("主角").font(Fonts.display(20)).padding(.horizontal)
                 HStack(alignment: .bottom, spacing: 12) {                // 战斗姿势（比武）、赶路的三帧（长卷：站、迈步、迈另一只脚）
-                    Image(uiImage: FigureArt.image(FigureArt.player(), height: 170, silhouette: silhouette))
-                    ForEach(0..<3) { k in Image(uiImage: FigureArt.image(FigureArt.playerTravel(step: k), height: 170, silhouette: silhouette)) }
+                    Image(uiImage: FigureArt.image(FigureArt.hero(), height: 170, silhouette: silhouette))
+                    Image(uiImage: FigureArt.image(FigureArt.catalog("herotravel"), height: 170, silhouette: silhouette))
                 }
                 .padding(.horizontal)
                 HStack(alignment: .bottom, spacing: 40) {                // 长卷上走路的小人放大：站着、两腿摆到最开的两帧
                     ForEach([0, Double.pi / 16, 3 * Double.pi / 16], id: \.self) { t in
                         WalkingHero(t: t).scaleEffect(3, anchor: .bottom).frame(height: 160, alignment: .bottom)
                     }
-                    Image(uiImage: FigureArt.image(FigureArt.guardsman(robe: UIColor(hex: 0xE2432C)), height: 170, silhouette: silhouette))
                 }
                 .padding(.horizontal, 60)
                 ForEach(groups, id: \.0) { name, entries in
@@ -65,7 +64,7 @@ struct ArtGalleryView: View {
                         HStack(alignment: .bottom, spacing: 8) {
                             ForEach(entries) { e in
                                 VStack(spacing: 2) {
-                                    Image(uiImage: FigureArt.image(FigureArt.guardsman(robe: UIColor(hexString: e.look.robe)), height: 170, silhouette: silhouette))
+                                    Image(uiImage: FigureArt.image(FigureArt.foe(named: e.name), height: 170, silhouette: silhouette))
                                     Text(e.name).font(.system(size: 12, weight: .bold))
                                 }
                             }
@@ -99,7 +98,7 @@ struct ArtGalleryView: View {
             try? SceneRenderer.duel(regionId: r.id, scene: scene, theme: RegionTheme.of(r.id)).pngData()?.write(to: dir.appendingPathComponent("duel-\(r.id).png"))
         }
         // 人物的画法参考（给 AI 出场景图时对照）：主角战斗、赶路，两个对手，白底排一排
-        let figures = [FigureArt.player(), FigureArt.playerTravel(step: 0), FigureArt.guardsman(robe: UIColor(hex: 0xE2432C)), FigureArt.guardsman(robe: UIColor(hex: 0x3B6EA8))]
+        let figures = [FigureArt.hero(), FigureArt.catalog("herotravel"), FigureArt.catalog("linda"), FigureArt.catalog("shenlin")]
             .map { FigureArt.image($0, height: 300) }
         let size = CGSize(width: figures.reduce(40) { $0 + $1.size.width + 40 }, height: 380)
         let sheet = UIGraphicsImageRenderer(size: size).image { ctx in

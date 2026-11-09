@@ -7,12 +7,15 @@ import LearningCore
 @MainActor
 enum AppResources {
     /// 内容包：音节、常用字、词、地区、奇遇（生成脚本产出）。
+    /// 调参「课程」选「原来」时，按旧规则归卷、地区按旧顺序排（重开 App 生效）。
     static let content: LearningContent = {
+        let legacy = TuningStore.load().curriculum == 0
+        Volumes.legacyCurriculum = legacy
         guard let url = Bundle.main.url(forResource: "content", withExtension: "json"),
               let data = try? Data(contentsOf: url), let c = try? LearningContent.load(from: data) else {
             fatalError("content.json 缺失或格式不对")
         }
-        return c
+        return legacy ? c.legacyCurriculum() : c
     }()
 
     /// 旅程用的词表：把内容包转成比武引擎认的格式（学会哪些音节由旅程按存档给）。

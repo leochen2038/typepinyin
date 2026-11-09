@@ -34,9 +34,10 @@ import Testing
             }
         }
         func share(_ r: DealReason) -> Double { Double(count[r] ?? 0) / Double(total) }
-        #expect(abs(share(.review) - 0.3) < 0.08, "\(count)")
-        #expect(abs(share(.knownInVolume) - 0.6) < 0.08, "\(count)")
-        #expect(abs(share(.filler) - 0.1) < 0.08, "\(count)")
+        let t = LearningTuning()                          // 本卷全会了：没会的那一份也出成本卷已会的
+        #expect(abs(share(.review) - t.mixReview) < 0.08, "\(count)")
+        #expect(abs(share(.knownInVolume) - (t.mixKnown + t.mixNew)) < 0.08, "\(count)")
+        #expect(abs(share(.filler) - t.mixFiller) < 0.08, "\(count)")
     }
 
     @Test func newOnesAreCappedAndSpaced() {

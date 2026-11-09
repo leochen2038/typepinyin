@@ -167,7 +167,7 @@ final class KeyboardView: UIView, UIInputViewAudioFeedback {
             UIView.animate(withDuration: 0.3) { self.thumb.alpha = 1 }
         } else if switchHands {                                 // 换手：这只淡出，那只在新键上淡入（不做镜像翻转的过渡）
             UIView.animate(withDuration: 0.15, delay: 0, options: .beginFromCurrentState, animations: { self.thumb.alpha = 0 }) { _ in
-                guard self.thumbLeft == isLeft else { return }
+                guard self.thumbFor == c, self.thumbLeft == isLeft else { return }   // 淡出的这一下已经换了键或收起了，就不要再显示
                 self.thumb.transform = pose
                 self.thumb.center = tip
                 UIView.animate(withDuration: 0.25) { self.thumb.alpha = 1 }

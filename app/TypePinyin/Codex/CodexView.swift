@@ -42,7 +42,7 @@ struct CodexView: View {
                         .background(Color.white).overlay(Rectangle().stroke(Palette.ink, lineWidth: 2))
                 }
                 .buttonStyle(.plain)
-                Text("秘籍").font(Fonts.display(26))
+                Text("收获").font(Fonts.display(26))
                     .overlay(PanelGesture { j.showPanel = true })
                 Spacer()
             }
@@ -50,8 +50,7 @@ struct CodexView: View {
             .background(Palette.mist)
             .overlay(alignment: .bottom) { Rectangle().fill(Palette.ink).frame(height: 3) }
             VStack(alignment: .leading, spacing: 10) {
-                Text("收了 \(j.cards.count) 张词卡，打出过 \(j.typedCommonChars.formatted()) 个常用字")
-                    .font(.system(size: 15, weight: .black))
+                GainsPanel(j: j)
                 tabs
             }
             .padding(.horizontal, 16).padding(.top, 12)
@@ -70,7 +69,7 @@ struct CodexView: View {
         .background(Palette.mist)
         .overlay {
             if let v = unveiling {
-                BookUnveil(title: Volumes.name(v), rank: "第\(Self.rankName(max(1, j.rank(of: v))))重", place: placeLine(v),
+                BookUnveil(title: Volumes.name(v), volume: v, rank: "第\(Self.rankName(max(1, j.rank(of: v))))重", place: placeLine(v),
                            reduceMotion: reduceMotion || JourneyFlags.fast) {
                     j.duel.sounds.play(.levelup)
                     j.duel.sounds.hitHaptic(heavy: true)
@@ -166,11 +165,21 @@ struct CodexView: View {
     static func rankName(_ r: Int) -> String { ["", "一", "二", "三", "四", "五"][min(5, max(0, r))] }
 
     /// 词卡等级用墨色深浅：见过淡墨、熟练浓墨、精通朱红；没有词卡的留白。
+    /// 这张表一屏放得下时格子能有多宽：屏宽减页面边距 32、面板边距 24、行首的声母 29，再减格子间隙 3。
+    private static func fitWidth(columns n: Int) -> CGFloat {
+        (UIScreen.main.bounds.width - 32 - 24 - 29 - CGFloat(max(0, n - 1)) * 3) / CGFloat(max(1, n))
+    }
+
+    /// 放不下（只有 y、w 那卷，19 列）才左右滑，别的卷一屏放下，不切掉最右边一列。
+    static func overflows(columns n: Int) -> Bool { fitWidth(columns: n) < 44 }
+
+    static func cellWidth(columns n: Int) -> CGFloat { overflows(columns: n) ? 54 : min(54, floor(fitWidth(columns: n))) }
+
     static func fill(_ p: CardLevel?) -> Color {
         switch p {
         case nil: Color(hex: 0xF6F3EC)
         case .met: Color(hex: 0xDCDCDA)
-        case .fluent: Color(hex: 0x3B3B3B)
+        case .fluent: Palette.navy
         case .master: Palette.red
         }
     }
@@ -210,7 +219,7 @@ struct CodexView: View {
         let show = shown(v)
         return VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center, spacing: 12) {
-                BookCover(title: Volumes.name(v), seal: Self.rankName(max(1, rank)), sealColor: Palette.red, dim: false)
+                BookCover(title: Volumes.name(v), seal: Self.rankName(max(1, rank)), sealColor: Palette.red, dim: false, volume: v)
                     .frame(width: 44, height: 60)
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -226,12 +235,17 @@ struct CodexView: View {
             rankBar(v, rank: max(1, rank))
             Text(rankLine(v, rank: max(1, rank))).font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.slate)
             let best = j.cardBest
+            let cw = Self.cellWidth(columns: finals.count)
+            if Self.overflows(columns: finals.count) {
+                Text("左右滑动看全部").font(.system(size: 11, weight: .bold)).foregroundStyle(Palette.slate2)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
             ScrollView(.horizontal, showsIndicators: false) {
                 Grid(horizontalSpacing: 3, verticalSpacing: 3) {
                     GridRow {
                         Color.clear.frame(width: 26, height: 18)
                         ForEach(finals, id: \.self) { fin in
-                            Text(fin).font(.system(size: 11, weight: .bold)).foregroundStyle(Palette.slate2).frame(width: 54)
+                            Text(fin).font(.system(size: 11, weight: .bold)).foregroundStyle(Palette.slate2).frame(width: cw)
                         }
                     }
                     ForEach(Array(inits.enumerated()), id: \.element) { row, ini in
@@ -239,9 +253,9 @@ struct CodexView: View {
                             Text(ini.isEmpty ? "–" : ini).font(.system(size: 11, weight: .bold)).foregroundStyle(Palette.slate2).frame(width: 26)
                             ForEach(Array(finals.enumerated()), id: \.element) { col, fin in
                                 if let s = table[ini + "|" + fin] {
-                                    cell(s, level: best[s], shown: show, delay: Double(row + col) * 0.035)
+                                    cell(s, level: best[s], width: cw, shown: show, delay: Double(row + col) * 0.035)
                                 } else {
-                                    Color.clear.frame(width: 54, height: 44)
+                                    Color.clear.frame(width: cw, height: 44)
                                 }
                             }
                         }
@@ -321,17 +335,17 @@ struct CodexView: View {
     }
 
     /// 有词卡的格子：拼法 + 含它的最好那张词卡；没有的留白。揭开时从左上往右下一波波亮出来。
-    func cell(_ s: String, level p: CardLevel?, shown: Bool, delay: Double) -> some View {
+    func cell(_ s: String, level p: CardLevel?, width: CGFloat, shown: Bool, delay: Double) -> some View {
         let word = p == nil ? nil : j.typedWords(with: s).first
         return Button { picked = s } label: {
             VStack(spacing: 1) {
                 if p != nil {
                     Text(s).font(.system(size: 13, weight: .bold, design: .rounded))
-                    if let word { Text(word).font(.system(size: 10, weight: .semibold)).lineLimit(1).minimumScaleFactor(0.7).opacity(0.75) }
+                    if let word { Text(word).font(.system(size: 10, weight: .semibold)).lineLimit(1).minimumScaleFactor(0.7) }
                 }
             }
             .foregroundStyle(Self.text(p))
-            .frame(width: 54, height: 44)
+            .frame(width: width, height: 44)
             .background(Self.fill(p))
             .overlay(Rectangle().stroke(Palette.ink.opacity(p == nil ? 0.15 : 0.6), lineWidth: 1))
             .overlay(alignment: .topTrailing) {
@@ -355,17 +369,43 @@ struct BookCover: View {
     let seal: String
     let sealColor: Color
     let dim: Bool
+    /// 拿到的卷：按这本书上色、放主题图案、加错位影。没拿到的（dim）还是灰的，什么图案都不露。
+    var volume: String? = nil
+
+    /// 七本书七种封面色，上下卷是一家；线的颜色跟着封面深浅走。
+    static func colors(_ volume: String) -> (cover: Color, thread: Color) {
+        let paper = Color(hex: 0xFBF7EE)
+        switch RankFx.theme(volume).kind {
+        case .plum: return (Color(hex: 0x9C3B4E), paper)
+        case .kite: return (Color(hex: 0x6FAFC7), Palette.ink)
+        case .drop: return (Color(hex: 0x274C77), paper)
+        case .tea: return (Color(hex: 0x7A5A3A), paper)
+        case .spring: return (Color(hex: 0x1F5E50), paper)
+        case .peach: return (Color(hex: 0x5C4A72), paper)
+        default: return (Palette.gold, Palette.ink)
+        }
+    }
 
     var body: some View {
         GeometryReader { g in
             let w = g.size.width, h = g.size.height
+            let art = dim ? nil : volume.map(Self.colors)
             ZStack(alignment: .topLeading) {
-                Rectangle().fill(dim ? Color(hex: 0xD9D9D6) : Color(hex: 0xF4EFE3))
+                Rectangle().fill(art?.cover ?? (dim ? Color(hex: 0xD9D9D6) : Color(hex: 0xF4EFE3)))
+                if art != nil {                                    // 装订边：深一点
+                    Rectangle().fill(Color.black.opacity(0.18)).frame(width: w * 0.17)
+                }
                 // 订线
                 ForEach(0..<4) { i in
-                    Rectangle().fill(Palette.ink.opacity(dim ? 0.25 : 0.55))
-                        .frame(width: w * 0.08, height: 1.2)
+                    Rectangle().fill(art?.thread ?? Palette.ink.opacity(dim ? 0.25 : 0.55))
+                        .frame(width: w * 0.08, height: max(1.2, w * 0.012))
                         .offset(x: w * 0.04, y: h * (0.15 + 0.23 * Double(i)))
+                }
+                // 主题图案
+                if let volume, art != nil {
+                    RankFx.mark(volume).frame(width: 30, height: 30)
+                        .scaleEffect(w * 0.0175)
+                        .position(x: w * 0.375, y: h * 0.38)
                 }
                 // 签条
                 Text(title.replacingOccurrences(of: "·", with: "\n"))
@@ -376,18 +416,36 @@ struct BookCover: View {
                     .minimumScaleFactor(0.5)
                     .background(Color.white.opacity(dim ? 0.4 : 1))
                     .overlay(Rectangle().stroke(Palette.ink.opacity(dim ? 0.3 : 0.7), lineWidth: 0.8))
-                    .offset(x: w * 0.55, y: h * 0.08)
+                    .offset(x: w * 0.6, y: h * 0.08)
                 // 印
-                Text(seal)
-                    .font(.system(size: w * 0.17, weight: .black))
-                    .foregroundStyle(sealColor)
-                    .padding(w * 0.03)
-                    .overlay(Rectangle().stroke(sealColor, lineWidth: max(1, w * 0.025)))
-                    .rotationEffect(.degrees(-8))
-                    .opacity(dim ? 0.6 : 1)
-                    .offset(x: w * 0.2, y: h * 0.72)
+                if !seal.isEmpty {
+                    if art != nil {                                // 彩色封面上红字看不清：实心红印、白字、米白边
+                        Text(seal)
+                            .font(.system(size: w * 0.17, weight: .black))
+                            .foregroundStyle(.white)
+                            .padding(w * 0.03)
+                            .background(Palette.red)
+                            .overlay(Rectangle().stroke(Color(hex: 0xFBF7EE), lineWidth: max(1, w * 0.02)))
+                            .rotationEffect(.degrees(-8))
+                            .offset(x: w * 0.24, y: h * 0.72)
+                    } else {
+                        Text(seal)
+                            .font(.system(size: w * 0.17, weight: .black))
+                            .foregroundStyle(sealColor)
+                            .padding(w * 0.03)
+                            .overlay(Rectangle().stroke(sealColor, lineWidth: max(1, w * 0.025)))
+                            .rotationEffect(.degrees(-8))
+                            .opacity(dim ? 0.6 : 1)
+                            .offset(x: w * 0.2, y: h * 0.72)
+                    }
+                }
             }
-            .overlay(Rectangle().stroke(Palette.ink.opacity(dim ? 0.4 : 1), lineWidth: max(1.5, w * 0.03)))
+            .overlay(Rectangle().stroke(Palette.ink.opacity(dim ? 0.4 : 1), lineWidth: max(1.5, w * 0.022)))
+            .background {
+                if art != nil {                                    // 藏青错位影，往右下错开
+                    Rectangle().fill(Palette.navy).offset(x: max(2, w * 0.035), y: max(2, w * 0.035))
+                }
+            }
         }
     }
 }
@@ -395,6 +453,7 @@ struct BookCover: View {
 /// 揭开演出：书从上面落下来，盖印（咚一声），书名和出处浮出，封面向左翻开淡出。点一下跳过。
 struct BookUnveil: View {
     let title: String
+    var volume: String? = nil
     let rank: String
     let place: String
     let reduceMotion: Bool
@@ -407,10 +466,10 @@ struct BookUnveil: View {
             Color.black.opacity(step >= 4 ? 0 : 0.55).ignoresSafeArea()
             VStack(spacing: 18) {
                 ZStack {
-                    BookCover(title: title, seal: "", sealColor: .clear, dim: false)
+                    BookCover(title: title, seal: "", sealColor: .clear, dim: false, volume: volume)
                     Text(rank)
-                        .font(.system(size: 22, weight: .black)).foregroundStyle(Palette.red)
-                        .padding(4).overlay(Rectangle().stroke(Palette.red, lineWidth: 3))
+                        .font(.system(size: 22, weight: .black)).foregroundStyle(.white)
+                        .padding(4).background(Palette.red).overlay(Rectangle().stroke(Color(hex: 0xFBF7EE), lineWidth: 3))
                         .rotationEffect(.degrees(-8))
                         .scaleEffect(step >= 2 ? 1 : 2.6)
                         .opacity(step >= 2 ? 1 : 0)
@@ -476,7 +535,7 @@ struct CardChip: View {
             Text(card.text).font(Fonts.hanzi(16)).lineLimit(1).minimumScaleFactor(0.6)
             HStack(spacing: 3) {
                 ForEach(0..<dots, id: \.self) { i in
-                    Circle().fill(i < card.cleanDuels ? (i < fluentAt ? Palette.ink : Palette.red) : Color.clear)
+                    Circle().fill(i < card.cleanDuels ? (i < fluentAt ? Palette.navy : Palette.red) : Color.clear)
                         .overlay(Circle().stroke(Palette.ink.opacity(0.6), lineWidth: 1))
                         .frame(width: 6, height: 6)
                 }
@@ -484,8 +543,38 @@ struct CardChip: View {
         }
         .frame(maxWidth: .infinity).padding(.vertical, 5)
         .background(Color(hex: 0xFFFBF1))
-        .overlay(RoundedRectangle(cornerRadius: 4).stroke(level == .master ? Palette.red : Palette.ink.opacity(0.7), lineWidth: level == .master ? 2 : 1))
+        .overlay(Rectangle().stroke(level == .master ? Palette.red : Palette.ink.opacity(0.7), lineWidth: level == .master ? 2 : 1))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(card.text)，\(level.name)")
+    }
+}
+
+/// 收获页顶上的四个数：学会的音节、打出过的常用字、打字速度、词卡。只报收获，不写总数、不写还差多少。
+struct GainsPanel: View {
+    let j: JourneyController
+
+    var body: some View {
+        let levels = j.cardLevels
+        let speed = TypingSpeedNote.last
+        let faster = (speed ?? 0) - (TypingSpeedNote.first ?? 0)
+        HStack(spacing: 6) {
+            tile(j.learnedSyllables.formatted(), "学会的音节", j.learnedToday > 0 ? "今天 +\(j.learnedToday)" : nil)
+            tile(j.typedCommonChars.formatted(), "打出过的常用字", nil)
+            tile(speed.map { String(format: "%.0f", $0) } ?? "–", "字/分", faster >= 1 ? String(format: "比第一场快 %.0f", faster) : nil)
+            tile(j.cards.count.formatted(), "张词卡", levels.fluent + levels.master > 0 ? "熟练 \(levels.fluent) 精通 \(levels.master)" : nil)
+        }
+        .accessibilityIdentifier("gains")
+    }
+
+    private func tile(_ number: String, _ label: String, _ note: String?) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(number).font(Fonts.display(22)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.6)
+            Text(label).font(.system(size: 11, weight: .bold)).foregroundStyle(Palette.slate).lineLimit(1).minimumScaleFactor(0.7)
+            Text(note ?? " ").font(.system(size: 10, weight: .black)).foregroundStyle(Palette.red).lineLimit(1).minimumScaleFactor(0.7)
+        }
+        .padding(.horizontal, 7).padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white)
+        .overlay(Rectangle().stroke(Palette.ink, lineWidth: 1.5))
     }
 }

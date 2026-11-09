@@ -2,13 +2,13 @@ import DuelCore
 import Foundation
 import LearningCore
 
-/// 练功房：只出玩家打过的词（梦里、地区里打完的牌都算），不分音节、不出新的。
+/// 练习场「词语」：只出玩家打过的词（梦里、地区里打完的牌都算），不分音节、不出新的。
 /// 每次进来随机一场：单挑、3 或 5 人群战、掌门（三条命）。打得不顺、常打错的词多出，练熟的少出但还会出。
 extension JourneyController {
-    /// 练功房里的词（打过的）。
+    /// 练习场里的词（打过的）。
     var practiceWords: [PracticeWord] { progress.practice.values.filter { !$0.syllables.isEmpty }.sorted { $0.lastSeen < $1.lastSeen } }
 
-    /// 进练功房：随机排一场，先问挑战还是返回。
+    /// 进练习场：随机排一场，先问挑战还是返回。
     func enterPractice() {
         let entered = content.regions.filter { ($0.id == "huluji" || progress.regions[$0.id] != nil) && $0.playable }
         let region = entered.randomElement() ?? content.regions[0]
@@ -18,14 +18,14 @@ extension JourneyController {
         let forceDuel = ProcessInfo.processInfo.arguments.contains("-practiceDuel")     // 开发用：固定单挑
         switch forceGroup ? 1 : forceDuel ? 0 : Int.random(in: 0..<3) {
         case 0:
-            practiceStation = Station(kind: .duel, foe: foe, encounterId: nil, line: "\(foe.name)来练功房，抱拳道：「请指教。」")
+            practiceStation = Station(kind: .duel, foe: foe, encounterId: nil, line: "\(foe.name)来练习场，抱拳道：「请指教。」")
         case 1:
             let size = forceGroup || Bool.random() ? 5 : 3
             practiceStation = Station(kind: .group, foe: region.foes.first ?? foe, encounterId: nil,
-                                      line: "\(["", "", "", "三", "", "五"][size])个人一起进了练功房，领头的是\((region.foes.first ?? foe).name)。",
+                                      line: "\(["", "", "", "三", "", "五"][size])个人一起进了练习场，领头的是\((region.foes.first ?? foe).name)。",
                                       groupSize: size)
         default:
-            practiceStation = Station(kind: .boss, foe: region.boss, encounterId: nil, line: "\(region.boss.name)也来练功房，说要跟你过几招。")
+            practiceStation = Station(kind: .boss, foe: region.boss, encounterId: nil, line: "\(region.boss.name)也来练习场，说要跟你过几招。")
         }
         practiceStage = .card
         screen = .practice
@@ -42,7 +42,7 @@ extension JourneyController {
         let words = practiceWords
         let typical = progress.speed?.secondsPerLetter ?? 0.45
         let boss = st.kind == .boss
-        planDuel(volume: nil, foe: foe, lives: boss ? 3 : 1, boss: boss, backdrop: (practiceRegion, Int.random(in: 0..<5)),
+        planDuel(volume: nil, foe: foe, lives: boss ? 3 : 1, boss: boss, backdrop: (practiceRegion, Int.random(in: 0..<5), 5),
                  group: st.kind == .group, groupTotal: st.groupSize,
                  pool: words.map(\.asContentWord), weights: PracticeWeights.weights(words, typical: typical)) { [weak self] summary, change in
             guard let self else { return }
@@ -54,5 +54,27 @@ extension JourneyController {
                                         .init(label: "回江湖", primary: false, action: back)]
             self.autoAdvance { _ in back() }
         }
+    }
+
+    // MARK: 文章
+
+    /// 练习场「文章」：去过的地区里的诗文（题壁诗、拓碑），一句句打，不比武。葫芦集一开始就算去过。
+    var practicePassages: [Encounter] {
+        let entered = Set(content.regions.filter { $0.id == "huluji" || progress.regions[$0.id] != nil }.map(\.id))
+        let order = Dictionary(uniqueKeysWithValues: content.regions.enumerated().map { ($1.id, $0) })
+        return content.encounters
+            .filter { !entered.isDisjoint(with: $0.regions) }
+            .sorted { (order[$0.regions.first ?? ""] ?? 99, $0.id) < (order[$1.regions.first ?? ""] ?? 99, $1.id) }
+    }
+
+    func startPracticeText(_ id: String) {
+        practiceTab = 1
+        duelToken += 1
+        practiceStage = .text(id)
+    }
+
+    func leavePracticeText() {
+        practiceTab = 1
+        practiceStage = .card
     }
 }

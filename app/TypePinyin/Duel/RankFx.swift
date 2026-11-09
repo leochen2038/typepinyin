@@ -39,6 +39,21 @@ enum RankFx {
 
     static func theme(_ volume: String) -> Theme { themes[volume] ?? themes["base"]! }
 
+    /// 这一卷的主题图案（30 点的格子）：地图的牌子、书封面都用它。
+    @ViewBuilder static func mark(_ volume: String) -> some View {
+        let k = order.firstIndex(of: volume) ?? 0
+        if theme(volume).kind == .confetti {                  // 一片小纸条认不出：画三片
+            ZStack {
+                symbol(1000 + k * 10, base: 1000).rotationEffect(.degrees(-20)).offset(x: -5, y: -4)
+                symbol(1000 + k * 10 + 1, base: 1000).rotationEffect(.degrees(25)).offset(x: 5, y: -2)
+                symbol(1000 + k * 10 + 2, base: 1000).rotationEffect(.degrees(-5)).offset(x: 0, y: 6)
+            }
+            .scaleEffect(0.85)
+        } else {
+            symbol(1000 + k * 10, base: 1000).scaleEffect(1.35)
+        }
+    }
+
     /// 调参面板里列主题用：「两字诀·上 · 白梅」。
     static func themeLabel(_ volume: String) -> String { Volumes.name(volume) + " · " + theme(volume).name }
 

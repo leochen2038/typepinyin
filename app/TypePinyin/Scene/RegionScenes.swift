@@ -1,5 +1,11 @@
 import CoreGraphics
 
+/// 比武背景的一张图和它管的那一段路：角色站在长卷上 y ≥ minY 的地方时用这张。
+struct DuelSegment {
+    var asset: String
+    var minY: CGFloat
+}
+
 /// 一片地区的场景布局。
 /// 长卷坐标：x 是长卷宽度的比例（0–1），y 是从顶往下的点数（按 1500 高写，400 以下会拉长到长卷的实际高度）。
 struct RegionScene {
@@ -26,9 +32,9 @@ struct RegionScene {
     var light = SceneLight()
     /// 整幅长卷的矢量图（Assets.xcassets 里的名字）。有就用它，不再画 items。
     var scrollAsset: String? = nil
-    /// 比武背景的矢量图（比屏幕宽，随站数往右平移）。有就用它，不再画 duel。
-    var duelAsset: String? = nil
-    /// 比武背景里掌门站要居中的位置（图上的 x）。掌门站固定停在这里，不跟站数走。
+    /// 比武背景的矢量图，从山脚往上列，一段路一张（比屏幕宽，同一段里的几站左右换取景）。有就用它，不再画 duel。
+    var duelSegments: [DuelSegment] = []
+    /// 比武背景里掌门站要居中的位置（最后一张图上的 x）。掌门站固定停在这里，不跟站数走。
     var duelBossX: CGFloat? = nil
     /// 长卷上的景物：背景（天、山、草坡）照原样先画，其余按底边从上到下画（下面的盖住上面的）。
     var items: [Item]
@@ -72,11 +78,8 @@ struct MistBand {
 }
 
 enum RegionScenes {
-    /// 有正式美术场景的地区（样板阶段只有半山镇）。
+    /// 有正式美术场景的地区：半山镇的声明带旧画法，单独写；其余九片由生成脚本写在 generated 里。
     static func scene(for regionId: String) -> RegionScene? {
-        switch regionId {
-        case "banshanzhen": return banshanzhen
-        default: return nil
-        }
+        regionId == "banshanzhen" ? banshanzhen : generated[regionId]
     }
 }

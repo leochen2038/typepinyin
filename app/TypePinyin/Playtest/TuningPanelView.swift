@@ -75,6 +75,7 @@ struct TuningPanelView: View {
         I(label: "每场最多几个新音节", kp: \.learning.newPerDuel, range: 0...8),
         I(label: "新音节后至少隔几张", kp: \.learning.newGap, range: 0...5),
         I(label: "每天最多新学几个", kp: \.learning.newPerDay, range: 0...30),
+        I(label: "新音节从最常用的前几个里挑", kp: \.learning.newPickTop, range: 1...30),
         I(label: "刚错过后几张出会的", kp: \.learning.afterMissKnown, range: 0...5),
         I(label: "最近几个词不重复", kp: \.learning.recentWords, range: 0...40),
         I(label: "初入江湖几场", kp: \.learning.openingBattles, range: 1...5),
@@ -142,6 +143,9 @@ struct TuningPanelView: View {
                     }
                     .pickerStyle(.menu)
                     Picker("文字的动效", selection: $t.textStyle) {
+                        Text("边打边爆").tag(3)
+                        Text("同行边爆边出").tag(4)
+                        Text("边打边爆、边爆边出交替").tag(5)
                         Text("战斗动效（无回顾）").tag(2)
                         Text("战斗动效 + 回顾").tag(1)
                         Text("简版（半秒快爆）").tag(0)
@@ -149,6 +153,7 @@ struct TuningPanelView: View {
                     .pickerStyle(.menu)
                     Toggle("每个字都有命中声和震动", isOn: $t.textCharHit)
                     Toggle("新画法（场景）", isOn: Binding(get: { t.artStyle == 1 }, set: { t.artStyle = $0 ? 1 : 0 }))
+                    Toggle("新画法（人物）", isOn: Binding(get: { t.figureStyle == 1 }, set: { t.figureStyle = $0 ? 1 : 0 }))
                 } header: {
                     Text("打什么（试玩）")
                 } footer: {
@@ -182,6 +187,7 @@ struct TuningPanelView: View {
                 }
                 Section("画面") {
                     Toggle("每招的小圆点（状态栏下面，最近 10 招）", isOn: $t.moveDots)
+                    Toggle("连招二、三档时人物身后的圆光", isOn: $t.comboAura)
                 }
                 Section {
                     // 开：按玩家拿到的秘籍和练到的重数（rankFx = -1）；关：所有字母按下面指定的重数和主题来爆
@@ -229,6 +235,10 @@ struct TuningPanelView: View {
                         Text("不定格").tag(0.0)
                         ForEach([0.5, 0.8, 1.0, 1.4], id: \.self) { s in Text("\(s.formatted()) 秒").tag(s) }
                     }
+                    Picker("必杀效果", selection: $t.finisherFx) {
+                        Text("刀痕").tag(1)
+                        Text("原来").tag(0)
+                    }
                 } header: {
                     Text("必杀（下一场生效）")
                 } footer: {
@@ -272,6 +282,20 @@ struct TuningPanelView: View {
                 Section {
                     Button("日子 +1（现在偏移 \(DayClock.offset) 天）") { DayClock.advanceOneDay(); dayTick += 1 }
                     Toggle("跳过旅程动画", isOn: Binding(get: { JourneyFlags.fast }, set: { JourneyFlags.fast = $0 }))
+                    Picker("开场（清空进度后生效）", selection: $t.openingStyle) {
+                        Text("碑文").tag(1)
+                        Text("梦里比武").tag(0)
+                    }
+                    Button("看一遍开场（不清进度）") { c.journey?.previewOpening(); dismiss() }
+                    Menu("看一块碑（不清进度）…") {
+                        ForEach(c.journey?.content.regions.filter { $0.stele != nil } ?? [], id: \.id) { r in
+                            Button("\(r.name)碑") { c.journey?.previewStele(r.id); dismiss() }
+                        }
+                    }
+                    Picker("课程（重开 App 生效）", selection: $t.curriculum) {
+                        Text("按韵母分，一个词只归一关").tag(1)
+                        Text("原来的（基本功 30 个音节）").tag(0)
+                    }
                     Menu("标为拿到…") {
                         Button("全部十卷") { c.journey?.debugObtain(RankFx.order); dismiss() }
                         ForEach(RankFx.order, id: \.self) { v in
