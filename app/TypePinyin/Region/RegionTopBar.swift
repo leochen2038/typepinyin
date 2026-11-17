@@ -9,7 +9,7 @@ struct RegionTopBar: View {
 
     var body: some View {
         let rank = j.rank(of: region.volume)
-        let progress = j.cardProgress(of: region.volume)
+        let progress = j.bookProgress(region.volume)
         HStack(spacing: 10) {
             Button { j.screen = .map } label: {
                 Text("回江湖").font(.system(size: 15, weight: .black)).foregroundStyle(Palette.ink)
@@ -20,7 +20,7 @@ struct RegionTopBar: View {
             .accessibilityIdentifier("backToMap")
             VStack(alignment: .leading, spacing: 1) {
                 Text(region.name).font(Fonts.display(22))
-                Text(Volumes.name(region.volume)).font(.system(size: 12, weight: .bold)).foregroundStyle(Palette.slate)
+                Text(j.xpLevels ? "练 \(region.hint)" : Volumes.name(region.volume)).font(.system(size: 12, weight: .bold)).foregroundStyle(Palette.slate)
             }
             .overlay(PanelGesture { j.showPanel = true })
             Spacer()
@@ -31,10 +31,10 @@ struct RegionTopBar: View {
                 Circle().stroke(Palette.mist2, lineWidth: 5)
                 Circle().trim(from: 0, to: rank == 0 ? 0 : progress).stroke(Palette.red, style: StrokeStyle(lineWidth: 5, lineCap: .round))
                     .rotationEffect(.degrees(-90))
-                Text(rank == 0 ? "零" : ["", "一", "二", "三", "四", "五"][rank]).font(Fonts.display(15))
+                Text(rank == 0 ? "零" : j.xpLevels ? "\(rank)" : ["", "一", "二", "三", "四", "五"][rank]).font(Fonts.display(15))
             }
             .frame(width: 36, height: 36)
-            .accessibilityLabel(rank == 0 ? "还没拿到这一卷" : "第\(rank)重")
+            .accessibilityLabel(rank == 0 ? "还没拿到这一卷" : j.levelText(rank))
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
         .background(Palette.mist.opacity(0.96))

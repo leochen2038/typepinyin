@@ -21,7 +21,7 @@ extension JourneyController {
         guard content.gathering != nil else { return false }
         if gatheringState != nil { return true }
         guard let last = content.regions.filter(\.playable).last else { return false }
-        return progress.regions[last.id]?.phase == .cleared || progress.volumes[last.volume]?.obtained == true
+        return cleared(last.id)
     }
 
     /// 地图上要不要弹请帖：开放了、还没看过、还没打通。

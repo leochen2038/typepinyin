@@ -4,7 +4,9 @@ import Testing
 /// 气、必杀
 @Suite struct QiFinisherTests {
     @Test func qiPerStrikeCappedAtFifteen() {
-        let e = Fixture.engine(features: [.qi])
+        var t = Fixture.hpMode
+        t.qiByLetters = false                        // 这里测按张攒的上限；按字母的换算见 qiByLettersScalesWithCardLength
+        let e = Fixture.engine(features: [.qi], tuning: t)
         e.player.combo = 20
         e.player.lastStrikeAt = e.gameClock
         let clock = FakeClock()
@@ -17,12 +19,30 @@ import Testing
         func qi(_ m: Double) -> Int {
             var t = Fixture.hpMode
             t.qiMultiplier = m
+            t.qiByLetters = false
             let e = Fixture.engine(features: [.qi], tuning: t)
             FakeClock().type(e, "pengyou")
             return e.player.qi
         }
         #expect(qi(1) > 0)
         #expect(qi(5) == 5 * qi(1))
+    }
+
+    /// 按字母攒气：一招的气乘「字母数 / 6」，12 个字母的牌攒的气是 6 个字母的两倍；关掉回到按张攒。
+    @Test func qiByLettersScalesWithCardLength() {
+        func qi(_ letters: Int, byLetters: Bool = true) -> Int {
+            var t = Fixture.hpMode
+            t.qiByLetters = byLetters
+            let e = Fixture.engine(features: [.qi], tuning: t)
+            e.player.combo = 5
+            e.gainQiForStrike(flaw: false, finisher: false, letters: letters)
+            return e.player.qi
+        }
+        #expect(qi(6) == 10)
+        #expect(qi(12) == 20)
+        #expect(qi(3) == 5)
+        #expect(qi(12, byLetters: false) == 10)
+        #expect(Tuning.standard.qiByLetters)
     }
 
     /// 默认按血量打：打空对手血条才赢，气条开着。
@@ -58,6 +78,7 @@ import Testing
     @Test func perfectMoveGivesExtraQi() {
         var t = Fixture.hpMode
         t.perfectQi = 5
+        t.qiByLetters = false
         let e = Fixture.engine(features: [.qi], tuning: t)
         let clock = FakeClock()
         clock.type(e, "pengyou", dt: 0.1)            // 快又没错：完美

@@ -116,7 +116,7 @@ public struct DuelSummary: Sendable, Equatable {
     public var charsPerMinute: Double = 0
 }
 
-/// 拼错过的音节：结算里打对过的算「打顺了」，没打对的列进「还手生」。
+/// 拼错过的音节：结算里打对过的算「打顺了」，没打对的列进「不熟练」。
 public struct MissedSyllable: Sendable, Equatable {
     public var spelling: String
     public var word: String

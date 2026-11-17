@@ -104,6 +104,7 @@ struct WorldMapView: View {
         let ph = phase(r.id)
         return IslandView(region: r, phase: ph, obtained: j.progress.volumes[r.volume]?.obtained == true,
                           recent: j.progress.journey.lastRegion == r.id, count: j.cardCount(in: r.volume),
+                          level: j.xpLevels ? j.levelText(j.rank(of: r.volume)) : "",
                           start: start, picked: selected == r.id, bobDelay: Double(index) * 0.7, reduceMotion: reduceMotion, useArt: newArt,
                           locked: locked, maxScale: maxScale)
             .contentShape(Rectangle())
@@ -130,8 +131,7 @@ struct WorldMapView: View {
     func unlocked(_ i: Int, _ order: [Region]) -> Bool {
         if i == 0 { return true }
         let prev = order[i - 1], me = order[i]
-        return phase(prev.id) == .cleared || j.progress.volumes[prev.volume]?.obtained == true
-            || phase(me.id) != .untouched || j.progress.volumes[me.volume]?.obtained == true
+        return phase(prev.id) == .cleared || phase(me.id) != .untouched
     }
 
     /// 现在该去的那座：第一座开着、还没走完的；全走完了就是最后一座。
@@ -190,7 +190,7 @@ struct WorldMapView: View {
         }
     }
 
-    func sealed(_ id: String) -> Bool { j.content.region(id).map { j.progress.volumes[$0.volume]?.obtained == true } ?? false }
+    func sealed(_ id: String) -> Bool { j.cleared(id) }
 
     /// 云顶：武林大会，下面十方印（按闯关的顺序，拿到一卷盖一个）；开放了点进去上山，没开放提示走完哪座岛。
     var peak: some View {

@@ -263,6 +263,18 @@ final class DuelController {
     var volumeRanks: [String: Int] = [:]
     /// 旅程填的小结卡片：多出来的收获和按钮（空 = 切片的「再来一场」）。
     var summaryGains: [String] = []
+    /// 结算页的秘籍进度（旅程给）：每本一行，条上原来的一段、这一场涨的一段。
+    var summaryBooks: [SummaryBook] = []
+    struct SummaryBook: Equatable, Identifiable {
+        var id: String                 // 卷
+        var name: String               // 「白梅台秘籍」
+        var level: Int                 // 结算后的等级
+        var from: Double               // 条上原来走到哪（0…1，原来那一级里）
+        var to: Double                 // 现在走到哪
+        var gain: Int
+        var leveledUp: Bool
+        var note: String               // 升级时写的一句（「打中时，白梅从 9 片变成 16 片」）
+    }
     var summaryActions: [SummaryAction] = []
     /// 入门提示（旅程里第一次遇到时显示一句）。
     var tip: String?
@@ -330,6 +342,7 @@ final class DuelController {
             engine = Self.makeEngine(tuning: tuning, round: round)
         }
         summaryGains = []
+        summaryBooks = []
         clearQi()
         summaryActions = []
         tip = nil
@@ -437,7 +450,7 @@ final class DuelController {
 
     /// 演示用（-autoplay 启动参数）：自动按正确的字母打，每招之间停一下，方便在模拟器上截图看动效。
     /// 加 -autostall：每张牌打完第一个字母后停 3 秒，看卡壳提示；加 -demoGrabStyle 0/1：剑气/绳镖，-demoGrabMode 1：一个音节取一次；-demoRankFx 5：所有字母按五重爆。
-    /// 加 -automiss：每三张牌有一张在第三个字母处按错一次，看结算里的「打顺了」「还手生」。
+    /// 加 -automiss：每三张牌有一张在第三个字母处按错一次，看结算里的「打顺了」「不熟练」。
     private func autoplay() {
         let stall = ProcessInfo.processInfo.arguments.contains("-autostall")
         let miss = ProcessInfo.processInfo.arguments.contains("-automiss")

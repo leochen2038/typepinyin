@@ -27,6 +27,8 @@ import SwiftData
     var volume: String = ""
     var obtained: Bool = false
     var rank: Int = 0
+    /// 这本秘籍累计的经验（2026-11-17 起；旧存档是 0）。
+    var xp: Int = 0
 
     init(deviceId: String, volume: String) {
         self.deviceId = deviceId

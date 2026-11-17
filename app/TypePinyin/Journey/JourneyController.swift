@@ -62,6 +62,20 @@ final class JourneyController {
     var debugJumpTick = 0
     /// 刚拿到的秘籍（演出用）。
     var obtained: String?
+    /// obtained 这一次是掌门盖印（打赢掌门），不是刚拿到秘籍。
+    var obtainedIsSeal = false
+    /// 这一场每本秘籍得的经验（打一张牌记一次，结算时存）。
+    @ObservationIgnored var duelXP: [String: Int] = [:]
+    /// 上一场结算：哪几本秘籍涨了经验（结算页画进度条用）。
+    var lastBookGains: [BookGain] = []
+    struct BookGain: Equatable, Identifiable {
+        var volume: String
+        var before: Int
+        var after: Int
+        var id: String { volume }
+        var gain: Int { after - before }
+        var leveledUp: Bool { BookXP.level(after) > BookXP.level(before) }
+    }
     /// 刚升重（演出用）。
     var rankUp: RankUp?
     struct RankUp: Equatable { var volume: String; var rank: Int }
@@ -126,6 +140,7 @@ final class JourneyController {
             debugObtain(list)
         }
         learner.records = progress.records
+        migrateBooks()
         sessionStartChars = typedCommonChars
         screen = startScreen()
         if case .region(let id) = screen { enterRegion(id) }
@@ -155,7 +170,7 @@ final class JourneyController {
             if duel.tuning.openingStyle == 1 && content.dream?.prologue != nil { return .gate }
             return .opening(battle: progress.journey.openingBattle)
         }
-        if progress.volumes["base"]?.obtained != true && !needsMapGuide { return .region("huluji") }
+        if !cleared("huluji") && !needsMapGuide { return .region("huluji") }
         return .map
     }
 
@@ -279,8 +294,13 @@ extension JourneyController {
                             seed: UInt64(Date().timeIntervalSince1970 * 1000) & 0xFFFF_FFFF)
         practicePending = [:]
         duelClean = [:]
+        duelXP = [:]
         let onCard: (Word, Bool, Double) -> Void = { [weak self] word, clean, spl in
             guard let self, !word.syllables.isEmpty else { return }
+            // 秘籍经验：这张牌归哪一关，就给哪本秘籍；打干净、打得快多给，第一次收到这张词卡再多给
+            let isNew = self.practicePending[word.text] == nil && (self.progress.practice[word.text]?.syllables.isEmpty ?? true)
+            let perfect = spl <= self.duel.tuning.goldSecondsPerLetter
+            self.duelXP[self.content.owner(of: word.syllables), default: 0] += BookXP.gain(clean: clean, perfect: perfect, new: isNew)
             self.duelClean[word.text] = (self.duelClean[word.text] ?? true) && clean
             var w = self.practicePending[word.text] ?? self.progress.practice[word.text]
                 ?? PracticeWord(text: word.text, syllables: word.syllables, volume: word.volume)
@@ -324,6 +344,7 @@ extension JourneyController {
                 ch.journey = j
                 ch.records = Set(attempts.map(\.spelling)).compactMap { self.learner.records[$0] }
                 ch.practice = self.settleCards()                            // 打过的词收成词卡（进练习场）
+                for (k, v) in self.settleBooks() { ch.volumes[k] = v }      // 秘籍经验
                 if !JourneyFlags.fast { TypingSpeedNote.record(summary.charsPerMinute) }   // 收获页的打字速度
                 self.practicePending = [:]
                 // 手速跨场记住（按设备）：每场结束按权重滑动一次
@@ -356,8 +377,10 @@ extension JourneyController {
         func list(_ a: [String]) -> String { a.prefix(4).joined(separator: "、") + (a.count > 4 ? " 等" : "") }
         var g: [String] = []
         if !fresh.isEmpty { g.append("收了 \(fresh.count) 张新词卡") }
-        if !fluent.isEmpty { g.append("\(fluent.count) 张词卡练到熟练：\(list(fluent))") }
-        if !master.isEmpty { g.append("\(master.count) 张词卡练到精通：\(list(master))") }
+        if !xpLevels {                                     // 按经验升级时不再说熟练、精通（只剩练习场挑词用）
+            if !fluent.isEmpty { g.append("\(fluent.count) 张词卡练到熟练：\(list(fluent))") }
+            if !master.isEmpty { g.append("\(master.count) 张词卡练到精通：\(list(master))") }
+        }
         lastCardGains = g
         duelClean = [:]
         return out
@@ -379,7 +402,23 @@ extension JourneyController {
         // 学会的音节：基本功大多数人本来就会，不算进来
         let learned = change.newlyMet.filter { content.volume(of: $0) != "base" }
         if !learned.isEmpty { g.append("这一场学会了 \(learned.count) 个音节") }
+        duel.summaryBooks = summaryBooks()                    // 秘籍进度跟着收获一起给结算页
+        if xpLevels { return (learned.isEmpty ? [] : [g.last!]) + lastCardGains }   // 累计常用字挪到收获页
         return g + lastCardGains
+    }
+
+    /// 结算页的秘籍进度：这一场涨了经验的每本一行。
+    func summaryBooks() -> [DuelController.SummaryBook] {
+        let pieces = [0, 9, 16, 24, 30, 36]
+        return lastBookGains.map { g in
+            let lv = BookXP.level(g.after)
+            let theme = RankFx.theme(g.volume).name
+            return DuelController.SummaryBook(
+                id: g.volume, name: bookName(g.volume), level: lv,
+                from: BookXP.progress(g.before), to: BookXP.progress(g.after),
+                gain: g.gain, leveledUp: g.leveledUp,
+                note: g.leveledUp ? "打中时，\(theme)从 \(pieces[lv - 1]) 片变成 \(pieces[lv]) 片\(lv == 4 ? "，还会往上冲" : "")" : "")
+        }
     }
 
     // MARK: 入门提示
@@ -528,6 +567,7 @@ extension JourneyController {
         regionStage = .scroll
         screen = .region(id)
         markMapGuideSeen()
+        if obtainAtStele, progress.volumes[region.volume]?.obtained != true { obtainVolume(region.volume) }   // 进岛（打完碑）就拿到这本秘籍
     }
 
     func planRoute(_ region: Region) -> Route {
@@ -579,6 +619,16 @@ extension JourneyController {
         regionStage = st.kind == .encounter ? .encounter : .duel
     }
 
+    /// 群战一共几个人：按岛的顺序往上加，前面的岛人少（掌门前那场 5 5 6 6 7 7 8 8 9 9，路上那场少两个）。
+    /// 调参关掉时返回 nil，按调参面板的「一共几个人」。
+    func groupTotal(in region: Region) -> Int? {
+        guard duel.tuning.groupByLevel else { return nil }
+        let k = content.regions.filter(\.playable).firstIndex { $0.id == region.id } ?? 0
+        let beforeBoss = [5, 5, 6, 6, 7, 7, 8, 8, 9, 9][min(k, 9)]
+        let next = route?.stations.indices.contains(stationIndex + 1) == true ? route?.stations[stationIndex + 1].kind : nil
+        return next == .boss ? beforeBoss : beforeBoss - 2
+    }
+
     /// 比武画面出现时：排这一站的比武。
     func startStationDuel() {
         guard let region = currentRegion, let st = currentStation, let foe = st.foe else { return }
@@ -597,7 +647,8 @@ extension JourneyController {
             allowed = region.volume == "base" ? Volumes.baseCore : nil
         }
         planDuel(volume: region.volume, foe: foe, lives: boss ? 3 : 1, boss: boss,
-                 backdrop: (region.id, stationIndex, route?.stations.count ?? 1), lengths: lengths, group: st.kind == .group, groupTotal: st.groupSize, groupHP: region.groupHP, allowed: allowed, focus: focus) { [weak self] summary, change in
+                 backdrop: (region.id, stationIndex, route?.stations.count ?? 1), lengths: lengths, group: st.kind == .group,
+                 groupTotal: st.groupSize ?? groupTotal(in: region), groupHP: region.groupHP, allowed: allowed, focus: focus) { [weak self] summary, change in
             self?.stationDone(won: summary.won, summary: summary, change: change)
         }
     }
@@ -649,7 +700,10 @@ extension JourneyController {
                 let firstClear = progress.regions[region.id]?.phase != .cleared
                 stationIndex = 0
                 saveRegion(region.id, phase: .cleared, keepRoute: false)   // 这一趟走完了，再去一趟从头开始
-                if firstClear { obtainVolume(region.volume) }
+                if firstClear {
+                    if obtainAtStele { obtainedIsSeal = true; obtained = region.volume }   // 秘籍进岛时就拿到了：掌门在上面盖印
+                    else { obtainVolume(region.volume) }
+                }
             } else {
                 saveRegion(region.id, phase: progress.regions[region.id]?.phase == .cleared ? .cleared : .inProgress)
             }
@@ -694,12 +748,58 @@ extension JourneyController {
     }
 
     /// 拿到一卷：存下来，按词卡直接升到对应的重数。
-    func obtainVolume(_ v: String) {
-        let r = CardRank.rank(of: v, obtained: true, previous: 0, best: cardBest, content: content)
+    func obtainVolume(_ v: String, show: Bool = true) {
+        let xp = progress.volumes[v]?.xp ?? 0
+        let r = xpLevels ? BookXP.level(xp) : CardRank.rank(of: v, obtained: true, previous: 0, best: cardBest, content: content)
         var ch = ProgressChange()
-        ch.volumes[v] = VolumeState(obtained: true, rank: r)
+        ch.volumes[v] = VolumeState(obtained: true, rank: max(r, progress.volumes[v]?.rank ?? 0), xp: xp)
         save(ch)
-        obtained = v
+        obtainedIsSeal = false
+        if show { obtained = v }
+    }
+
+    /// 秘籍按经验升级（调参「秘籍怎么升级」；关掉是原来按词卡算重数、打赢掌门才拿到）。
+    var xpLevels: Bool { learner.tuning.bookLevels == 1 }
+    /// 进岛（打完碑）就拿到秘籍；原来是打赢掌门才拿到。
+    var obtainAtStele: Bool { xpLevels }
+    /// 这座岛打通了（打赢过掌门）。解锁下一座、山顶十方印、武林大会开放都看它，不看有没有秘籍。
+    func cleared(_ regionId: String) -> Bool { progress.regions[regionId]?.phase == .cleared }
+
+    /// 这一场的经验结到秘籍上：只涨不扣，够了就升级。返回要存的卷。
+    func settleBooks() -> [String: VolumeState] {
+        defer { duelXP = [:] }
+        guard xpLevels else { lastBookGains = []; return [:] }
+        var out: [String: VolumeState] = [:]
+        var gains: [BookGain] = []
+        for (v, g) in duelXP where g > 0 {
+            let old = progress.volumes[v] ?? VolumeState(obtained: false, rank: 0)
+            let xp = old.xp + g
+            let rank = old.obtained ? max(old.rank, BookXP.level(xp)) : old.rank
+            out[v] = VolumeState(obtained: old.obtained, rank: rank, xp: xp)
+            if old.obtained {
+                gains.append(BookGain(volume: v, before: old.xp, after: xp))
+                if rank > old.rank { sessionRankUps.append("\(bookName(v))升到 \(rank) 级") }
+            }
+        }
+        let order = Volumes.all
+        func key(_ g: BookGain) -> (Int, Int, Int) { (g.leveledUp ? 1 : 0, g.gain, -(order.firstIndex(of: g.volume) ?? 99)) }
+        lastBookGains = gains.sorted { key($0) < key($1) }      // 涨得少的在上，升级的排最后（挨着按钮）
+        return out
+    }
+
+    /// 旧存档接到经验升级：已有的等级补上那一级起步的经验；进去过的岛还没秘籍的，补上秘籍。
+    func migrateBooks() {
+        guard xpLevels else { return }
+        var ch = ProgressChange()
+        for (v, s) in progress.volumes where s.obtained && s.xp == 0 && s.rank > 1 {
+            ch.volumes[v] = VolumeState(obtained: true, rank: s.rank, xp: BookXP.seed(rank: s.rank))
+        }
+        for r in content.regions where r.playable && (progress.regions[r.id]?.phase ?? .untouched) != .untouched
+            && progress.volumes[r.volume]?.obtained != true {
+            let xp = progress.volumes[r.volume]?.xp ?? 0
+            ch.volumes[r.volume] = VolumeState(obtained: true, rank: BookXP.level(xp), xp: xp)
+        }
+        if !ch.volumes.isEmpty { save(ch) }
     }
 
     /// 开发用（调参「标为拿到」、启动参数 -obtain）：把这几卷标为拿到，对应的地区算打通，不演出。
@@ -713,7 +813,7 @@ extension JourneyController {
         ch.journey = jn
         for v in volumes where RankFx.order.contains(v) {
             let r = CardRank.rank(of: v, obtained: true, previous: progress.volumes[v]?.rank ?? 0, best: cardBest, content: content)
-            ch.volumes[v] = VolumeState(obtained: true, rank: max(1, r))
+            ch.volumes[v] = VolumeState(obtained: true, rank: max(1, r), xp: progress.volumes[v]?.xp ?? 0)
             for region in content.regions where region.volume == v {
                 ch.regions[region.id] = RegionState(phase: .cleared, stationIndex: 0, route: nil)
             }
@@ -723,12 +823,13 @@ extension JourneyController {
 
     /// 已拿到的卷，词卡够了就升重。
     func checkRankUps() {
+        guard !xpLevels else { return }                       // 按经验升级时，升级在结算里就结了
         let best = cardBest
         for (v, s) in progress.volumes where s.obtained {
             let r = CardRank.rank(of: v, obtained: true, previous: s.rank, best: best, content: content)
             if r > s.rank {
                 var ch = ProgressChange()
-                ch.volumes[v] = VolumeState(obtained: true, rank: r)
+                ch.volumes[v] = VolumeState(obtained: true, rank: r, xp: s.xp)
                 save(ch)
                 sessionRankUps.append("《\(Volumes.name(v))》练到第\(["", "一", "二", "三", "四", "五"][r])重")
                 if obtained == nil { rankUp = RankUp(volume: v, rank: r) }

@@ -69,6 +69,7 @@ struct TuningPanelView: View {
     private let learnI: [I] = [
         I(label: "词卡熟练：累计几场打对", kp: \.learning.fluentDuels, range: 1...6),
         I(label: "词卡精通：累计几场打对", kp: \.learning.masterDuels, range: 2...10),
+        I(label: "秘籍怎么升级（1 打牌涨经验 / 0 原来按词卡；重开生效）", kp: \.learning.bookLevels, range: 0...1),
         I(label: "熟练要几个不同的日子", kp: \.learning.fluentDays, range: 1...5),
         I(label: "熟练看最近几次", kp: \.learning.fluentRecent, range: 1...10),
         I(label: "精通看最近几次", kp: \.learning.masterRecent, range: 1...10),
@@ -231,6 +232,7 @@ struct TuningPanelView: View {
                     Picker("攒气倍数", selection: $t.qiMultiplier) {
                         ForEach([1.0, 2, 3, 5, 10, 20], id: \.self) { m in Text("\(Int(m)) 倍").tag(m) }
                     }
+                    Toggle("按字母攒气（长牌多攒，关掉是按张攒）", isOn: $t.qiByLetters)
                     Picker("必杀定格", selection: $t.finisherFreeze) {
                         Text("不定格").tag(0.0)
                         ForEach([0.5, 0.8, 1.0, 1.4], id: \.self) { s in Text("\(s.formatted()) 秒").tag(s) }
@@ -247,7 +249,8 @@ struct TuningPanelView: View {
                 Section {
                     Toggle("群战", isOn: $t.groupFight)
                     Stepper("场上最多几个人：\(t.groupSize)", value: $t.groupSize, in: 1...3)
-                    Stepper("一共几个人：\(t.groupTotal)", value: $t.groupTotal, in: 2...9)
+                    Toggle("旅程里按岛定人数（前面的岛人少）", isOn: $t.groupByLevel)
+                    Stepper("一共几个人：\(t.groupTotal)\(t.groupByLevel ? "（旅程里不用）" : "")", value: $t.groupTotal, in: 2...9)
                     Picker("必杀怎么打全场", selection: $t.groupFinisherStyle) {
                         Text("连斩（定了）").tag(1)
                         Text("横扫剑气").tag(0)

@@ -29,7 +29,7 @@ public struct Route: Codable, Sendable, Equatable {
 }
 
 /// 排路线：8–10 战（单挑、群战、掌门），倒数第二站一定是群战，最后是掌门；中间也可能再有一场群战。
-/// 奇遇另算：1–2 场（有几段放几段），随机放在前面。葫芦集和别的岛一样（2026-11-09 改）。
+/// 奇遇另算：1–2 场，从这座岛的全部诗文里随机挑，随机放在前面。葫芦集和别的岛一样（2026-11-09 改）。
 /// 原来的课程（shortFirstLevel）：第一关固定 6 战：单挑、3 人群战、单挑、单挑、5 人群战、掌门；没有奇遇。
 public enum RoutePlanner {
     /// 第一关的排法：每站是单挑（nil）还是几个人的群战，最后再加掌门。
@@ -67,7 +67,7 @@ public enum RoutePlanner {
         // 奇遇（第一关没有）
         if !first {
             let count = min(Int(rng.next() % 2) + 1, encs.count)
-            let picks = Array(encs.prefix(3)).shuffled(using: &rng).prefix(count)
+            let picks = encs.shuffled(using: &rng).prefix(count)   // 每座岛 9–10 段，从全部里挑，走几趟遇到的不一样（原来只挑最相关的前 3 段）
             for e in picks {
                 let at = Int(rng.next() % UInt64(max(1, stations.count - 1)))   // 不放在掌门前那场群战之后
                 stations.insert(Station(kind: .encounter, foe: nil, encounterId: e.id, line: e.intro), at: at)
@@ -78,7 +78,7 @@ public enum RoutePlanner {
     }
 
     static func groupLine(_ region: Region, size: Int? = nil) -> String {
-        let who = size.map { "\(["", "一", "两", "三", "四", "五", "六"][min($0, 6)])个人" } ?? "一伙人"
+        let who = size.map { "\(["", "一", "两", "三", "四", "五", "六", "七", "八", "九"][min($0, 9)])个人" } ?? "一伙人"
         return "\(who)从路两边围了上来，领头的是\(region.foes.first?.name ?? "")。"
     }
 

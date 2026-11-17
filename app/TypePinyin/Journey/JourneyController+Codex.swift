@@ -44,6 +44,26 @@ extension JourneyController {
             .sorted { ($0.cleanDuels, $0.lastSeen) > ($1.cleanDuels, $1.lastSeen) }
     }
 
+    /// 秘籍的叫法：按经验升级时用岛名叫（「白梅台秘籍」），原来的叫法是卷名（「两字诀·上卷」）。
+    func bookName(_ v: String) -> String {
+        guard xpLevels, let r = region(giving: v) else { return Volumes.name(v) }
+        return r.name + "秘籍"
+    }
+
+    /// 这本秘籍练什么（「an en in」），写在名字旁边。
+    func bookFocus(_ v: String) -> String { region(giving: v)?.hint ?? "" }
+
+    /// 等级的写法：「3 级」；原来是「第三重」。
+    func levelText(_ rank: Int) -> String {
+        let r = max(1, min(5, rank))
+        return xpLevels ? "\(r) 级" : "第\(["", "一", "二", "三", "四", "五"][r])重"
+    }
+
+    /// 这本秘籍这一级走了多少（0…1）。
+    func bookProgress(_ v: String) -> Double {
+        xpLevels ? BookXP.progress(progress.volumes[v]?.xp ?? 0) : cardProgress(of: v)
+    }
+
     /// 这一卷在哪个地区、谁手里。
     func region(giving v: String) -> Region? { content.regions.first { $0.volume == v } }
 }

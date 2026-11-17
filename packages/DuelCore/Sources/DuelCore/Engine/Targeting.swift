@@ -219,7 +219,7 @@ extension DuelEngine {
         }
         emit(.strike(card: i, damage: dmg, flaw: flawHit, finisher: card.isFinisher, heavy: heavy))
         emit(.moveDone(index: moveMarks.count - 1, gold: gold))
-        gainQiForStrike(flaw: flawHit, finisher: card.isFinisher, perfect: gold)
+        gainQiForStrike(flaw: flawHit, finisher: card.isFinisher, perfect: gold, letters: card.word.letterCount)
         player.lastStrikeAt = clock
         readyAt = clock
         target = .none

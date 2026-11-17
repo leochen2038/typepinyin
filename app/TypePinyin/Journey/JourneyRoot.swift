@@ -81,7 +81,7 @@ struct JourneyRoot: View {
             case .map:
                 WorldMapView(j: j)
             case .codex:
-                CodexView(j: j)
+                if j.xpLevels { BookShelfView(j: j) } else { CodexView(j: j) }   // 按经验升级：书架；原来：七本选项卡
             case .gathering:
                 GatheringRoot(j: j)
             }

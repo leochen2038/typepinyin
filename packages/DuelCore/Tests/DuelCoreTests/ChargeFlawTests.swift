@@ -44,7 +44,9 @@ import Testing
     }
 
     @Test func flawMultipliesDamageAndQi() {
-        let e = Fixture.engine(features: [.flaw, .qi])
+        var t = Fixture.hpMode
+        t.qiByLetters = false
+        let e = Fixture.engine(features: [.flaw, .qi], tuning: t)
         var c = e.cards[1]
         c.hasFlaw = false
         let plain = e.damage(for: c, combo: 1, store: 1)

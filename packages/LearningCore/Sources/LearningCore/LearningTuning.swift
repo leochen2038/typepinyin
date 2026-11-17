@@ -47,6 +47,8 @@ public struct LearningTuning: Codable, Sendable, Equatable {
     /// 词卡熟练、精通：累计这么多场打对（一场里打这个词都没错、没看提示算一场）。
     public var fluentDuels: Int = 2
     public var masterDuels: Int = 4
+    /// 秘籍怎么升级：1 = 打牌涨经验（默认，2026-11-17），0 = 原来按词卡算重数（一半音节有熟练的词卡升二重……）。
+    public var bookLevels: Int = 1
     /// 地区里挑词时，从没收过的词卡里挑的比例（其余出收过的）。
     public var newCardShare: Double = 0.7
     /// 新音节第一次碰到就打对、每个字母不超过这么多秒：算本来就会，不占新音节名额。
@@ -83,7 +85,7 @@ public struct LearningTuning: Codable, Sendable, Equatable {
         case firstFluentStart, fluentDays, fluentRecent, fluentStart, masterRecent, masterStart
         case replayOffsets, reviewDays, mixKnown, mixNew, mixReview, mixFiller, newPerDuel, newGap, newPerDay, newPickTop
         case afterMissKnown, successTarget, successWindow, recentWords
-        case fluentDuels, masterDuels, newCardShare, knownSecondsPerLetter, speedWeight
+        case fluentDuels, masterDuels, bookLevels, newCardShare, knownSecondsPerLetter, speedWeight
         case openingBattles, openingTargetSeconds, openingMinHP
         case earlyLengths, middleLengths, bossLengths
     }
@@ -115,6 +117,7 @@ public struct LearningTuning: Codable, Sendable, Equatable {
         recentWords = try v(.recentWords, d.recentWords)
         fluentDuels = try v(.fluentDuels, d.fluentDuels)
         masterDuels = try v(.masterDuels, d.masterDuels)
+        bookLevels = try v(.bookLevels, d.bookLevels)
         newCardShare = try v(.newCardShare, d.newCardShare)
         knownSecondsPerLetter = try v(.knownSecondsPerLetter, d.knownSecondsPerLetter)
         speedWeight = try v(.speedWeight, d.speedWeight)

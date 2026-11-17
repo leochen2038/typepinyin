@@ -11,6 +11,8 @@ struct IslandView: View {
     let obtained: Bool
     let recent: Bool
     let count: Int
+    /// 这本秘籍几级的写法（「2 级」）；空 = 不写等级（原来的牌子只写张数）。
+    var level = ""
     var start = false
     var picked = false
     var bobDelay = 0.0
@@ -111,7 +113,10 @@ struct IslandView: View {
     var tag: some View {
         HStack(spacing: 2) {
             if obtained { RankFx.mark(region.volume).frame(width: 30, height: 30).scaleEffect(0.62).frame(width: 19, height: 19) }
-            Text("\(count)").font(.system(size: 13, weight: .black)).foregroundStyle(obtained ? Palette.red : Palette.ink)
+            if obtained && !level.isEmpty {
+                Text(level).font(.system(size: 13, weight: .black)).foregroundStyle(Palette.ink).padding(.trailing, 4)
+            }
+            Text("\(count)").font(.system(size: level.isEmpty ? 13 : 11, weight: .black)).foregroundStyle(obtained && level.isEmpty ? Palette.red : Palette.slate)
             Text("张").font(.system(size: 9, weight: .bold)).foregroundStyle(Palette.slate2)
         }
         .padding(.leading, obtained ? 3 : 7).padding(.trailing, 7).frame(height: 22)

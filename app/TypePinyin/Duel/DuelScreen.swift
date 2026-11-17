@@ -81,7 +81,11 @@ struct DuelScreen: View {
             if let s = c.summary {
                 ZStack {
                     Color.black.opacity(0.3).ignoresSafeArea(edges: .top)
-                    SummaryCardView(s: s, foe: c.foeName, extraGains: c.summaryGains, actions: c.summaryActions) { c.restart() }
+                    SummaryCardView(s: s, foe: c.foeName, extraGains: c.summaryGains, books: c.summaryBooks, onLevelUp: {
+                        c.sounds.play(.levelup)
+                        c.sounds.play(.hitHeavy)
+                        c.sounds.hitHaptic(heavy: true)
+                    }, actions: c.summaryActions) { c.restart() }
                 }
                 .transition(.opacity)
             }

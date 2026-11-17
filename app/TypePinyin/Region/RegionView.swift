@@ -57,7 +57,10 @@ struct RegionView: View {
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
                     if let v = j.obtained {
-                        ObtainVolumeView(volume: v, rank: j.rank(of: v), boss: region.boss.defeatLine.map { (region.boss.name, $0) }) { j.obtained = nil }
+                        ObtainVolumeView(volume: v, rank: j.rank(of: v),
+                                         name: j.xpLevels ? j.bookName(v) : nil, level: j.xpLevels ? j.levelText(j.rank(of: v)) : nil,
+                                         seal: j.obtainedIsSeal ? String(region.name.prefix(1)) : nil,
+                                         boss: j.obtainedIsSeal || !j.obtainAtStele ? region.boss.defeatLine.map { (region.boss.name, $0) } : nil) { j.obtained = nil }
                             .transition(.opacity)
                     }
                     if let up = j.rankUp, j.obtained == nil {

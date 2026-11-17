@@ -37,6 +37,9 @@ public struct Tuning: Codable, Sendable, Equatable {
     public var perfectQi: Int = 5
     /// 攒气倍数（测试用，1 = 正常）：调大了气攒得快，必杀来得勤，看必杀的演出和群战打全场不用等。
     public var qiMultiplier: Double = 1
+    /// 攒气按字母（2026-11-16，默认开）：一招攒的气再乘「这张牌的字母数 / 6」，长牌多攒、短牌少攒。
+    /// 后面的关拼音长、一场打的牌少，按张攒气的话必杀越往后越少；按字母攒，各关一场出必杀的次数差不多。关掉 = 原来按张攒。
+    public var qiByLetters: Bool = true
     /// 主角出招前的预备动作（秒，0 = 不做）：往后退、压扁、后仰攒劲再冲出去。原版 0.75 秒，冲刺时长跟着等比变。
     public var anticipation: Double = 0.14
     /// 必杀最后一刀定格几秒（0 = 不定格）：画面停住、盖上成语，比武计时也停。
@@ -88,6 +91,9 @@ public struct Tuning: Codable, Sendable, Equatable {
     public var comboAura: Bool = false
     public var groupSize: Int = 3
     public var groupTotal: Int = 5
+    /// 旅程里的群战一共几个人按岛的顺序往上加（2026-11-09）：掌门前那场 5 5 6 6 7 7 8 8 9 9，路上那场少两个；
+    /// 关掉 = 原来（一律按 groupTotal）。路线里写了人数的（原来的课程第一关）照路线。
+    public var groupByLevel: Bool = true
     public var heavyLetters: Int = 10
     public var mediumLetters: Int = 7
     public var replayOffsets: [Int] = [2, 5]
@@ -140,8 +146,8 @@ public struct Tuning: Codable, Sendable, Equatable {
         case qiPerStrikeBase, qiPerStrikeMax, qiParry, qiBlock, finisherBase, finisherComboBonus
         case heavyLetters, mediumLetters, replayOffsets, commitOnRelease
         case expectedKeyGrowPt, nearMissMaxPt, hapticsOnKey, comboGoldAt, comboRedAt, movesPerDuel, goldSecondsPerLetter, hintSeconds
-        case cardsOnTable, pressureFactor, pressureBaseSeconds, pressureMinSeconds, grabStyle, handZones, slashMinGap, grabMode, qiBar, moveDots, rankFx, rankFxTheme, finisherShare, perfectQi, qiMultiplier, anticipation, finisherFreeze, groupFight, groupFinisherStyle, groupSize, groupTotal, textMode, textStyle, textCharHit, artStyle, figureStyle
-        case foeLives, finisherTakesLife, lifeSpeedup, lifeDownSeconds, comboAura, finisherFx, openingStyle, curriculum
+        case cardsOnTable, pressureFactor, pressureBaseSeconds, pressureMinSeconds, grabStyle, handZones, slashMinGap, grabMode, qiBar, moveDots, rankFx, rankFxTheme, finisherShare, perfectQi, qiMultiplier, qiByLetters, anticipation, finisherFreeze, groupFight, groupFinisherStyle, groupSize, groupTotal, textMode, textStyle, textCharHit, artStyle, figureStyle
+        case foeLives, finisherTakesLife, lifeSpeedup, lifeDownSeconds, comboAura, finisherFx, openingStyle, curriculum, groupByLevel
         case bossPressure, bossPushBack, bossCycleCards, bossHit
         case learning
     }
@@ -202,6 +208,7 @@ public struct Tuning: Codable, Sendable, Equatable {
         finisherShare = try v(.finisherShare, d.finisherShare)
         perfectQi = try v(.perfectQi, d.perfectQi)
         qiMultiplier = try v(.qiMultiplier, d.qiMultiplier)
+        qiByLetters = try v(.qiByLetters, d.qiByLetters)
         anticipation = try v(.anticipation, d.anticipation)
         finisherFreeze = try v(.finisherFreeze, d.finisherFreeze)
         groupFight = try v(.groupFight, d.groupFight)
@@ -225,6 +232,7 @@ public struct Tuning: Codable, Sendable, Equatable {
         artStyle = try v(.artStyle, d.artStyle)
         figureStyle = try v(.figureStyle, d.figureStyle)
         comboAura = try v(.comboAura, d.comboAura)
+        groupByLevel = try v(.groupByLevel, d.groupByLevel)
         finisherFx = try v(.finisherFx, d.finisherFx)
         handZones = try v(.handZones, d.handZones)
         slashMinGap = try v(.slashMinGap, d.slashMinGap)

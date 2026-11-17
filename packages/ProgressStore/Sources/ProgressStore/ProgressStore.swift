@@ -35,11 +35,14 @@ public struct JourneyState: Codable, Sendable, Equatable {
 
 public struct VolumeState: Codable, Sendable, Equatable {
     public var obtained: Bool
-    /// 记过的最高重数。
+    /// 记过的最高等级（原来叫重数）。
     public var rank: Int
-    public init(obtained: Bool, rank: Int) {
+    /// 累计的经验：打这本秘籍的牌就涨。两台设备取大的那份。
+    public var xp: Int
+    public init(obtained: Bool, rank: Int, xp: Int = 0) {
         self.obtained = obtained
         self.rank = rank
+        self.xp = xp
     }
 }
 
@@ -167,9 +170,9 @@ public final class ProgressStore {
             p.records[r.spelling] = p.records[r.spelling].map { Self.merge($0, r) } ?? r
         }
         for row in (try? context.fetch(FetchDescriptor<DeviceVolume>())) ?? [] {
-            let v = VolumeState(obtained: row.obtained, rank: row.rank)
+            let v = VolumeState(obtained: row.obtained, rank: row.rank, xp: row.xp)
             if let old = p.volumes[row.volume] {
-                p.volumes[row.volume] = VolumeState(obtained: old.obtained || v.obtained, rank: max(old.rank, v.rank))
+                p.volumes[row.volume] = VolumeState(obtained: old.obtained || v.obtained, rank: max(old.rank, v.rank), xp: max(old.xp, v.xp))
             } else {
                 p.volumes[row.volume] = v
             }
@@ -222,6 +225,7 @@ public final class ProgressStore {
             let row = try fetchOne(DeviceVolume.self, #Predicate { $0.deviceId == dev && $0.volume == v }) ?? insert(DeviceVolume(deviceId: dev, volume: v))
             row.obtained = row.obtained || s.obtained
             row.rank = max(row.rank, s.rank)
+            row.xp = max(row.xp, s.xp)
         }
         for (id, s) in change.regions {
             let row = try fetchOne(DeviceRegion.self, #Predicate { $0.deviceId == dev && $0.regionId == id }) ?? insert(DeviceRegion(deviceId: dev, regionId: id))
