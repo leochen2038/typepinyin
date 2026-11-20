@@ -2,68 +2,50 @@ import LearningCore
 import ProgressStore
 import SwiftUI
 
-/// 点开地区：底部弹出的简介卡。状态写未挑战 / 挑战中 / 已挑战；词卡写这里一共几张、已集几张。
+/// 点开地区：底部弹出的简介卡。和碑文页的「这一关」用同一套说法：练什么（hint + 一句白话）、几个新音节、几张词卡；
+/// 秘籍按岛名叫（「葫芦集秘籍 · 2 级」，没拿到写怎么拿）。状态写未挑战 / 挑战中 / 已打通。
 struct RegionSheet: View {
     let region: Region
     let phase: RegionPhase
     let stationLine: String?
+    /// 秘籍那一行（「葫芦集秘籍 · 2 级」/「进岛打完碑文，就拿到葫芦集秘籍」）。
+    var bookLine = ""
+    /// 这一关的新音节有几个（第一座岛不写「新」）。
+    var syllables = 0
+    var firstRegion = false
     /// 这一卷收了几张词卡、含这一卷音节的词一共几张。
     var cards = 0
     var total = 0
     let onGo: () -> Void
     let onClose: () -> Void
-    /// 这一趟走到一半时的「从头开始」：丢掉这一趟的进度，从第一站重新走（秘籍、词卡、重数不受影响）。
-    var onRestart: (() -> Void)? = nil
-    @State private var confirmRestart = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 Text(region.name).font(Fonts.display(30))
-                Text(Volumes.name(region.volume)).font(.system(size: 14, weight: .bold)).foregroundStyle(Palette.slate)
                 Spacer()
                 Text(stateText).font(.system(size: 13, weight: .black)).foregroundStyle(stateColor)
                 Button(action: onClose) { Image(systemName: "xmark").font(.system(size: 15, weight: .bold)).foregroundStyle(Palette.ink) }
                     .buttonStyle(.plain).accessibilityLabel("关上")
             }
+            // 秘籍和数字放在岛名下面一起看：先知道这座岛有多少东西，再往下看练什么
+            VStack(alignment: .leading, spacing: 2) {
+                if !bookLine.isEmpty {
+                    Text(bookLine).font(.system(size: 14, weight: .black)).foregroundStyle(Palette.slate)
+                }
+                Text(factsLine).font(.system(size: 13, weight: .bold)).foregroundStyle(Palette.slate)
+            }
             if let stationLine { Text(stationLine).font(.system(size: 14, weight: .bold)).foregroundStyle(Palette.green) }
             Text(region.scene).font(.system(size: 15)).foregroundStyle(Palette.ink)
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Text(region.hint).font(Fonts.display(24)).foregroundStyle(Palette.red)
-                Text(phase == .untouched ? "这里有 \(total) 张词卡" : "已集 \(cards) / \(total) 张词卡")
-                    .font(.system(size: 14, weight: .semibold)).foregroundStyle(Palette.slate)
-            }
-            HStack(spacing: 8) {
-                ForEach(region.examples, id: \.char) { e in
-                    VStack(spacing: 0) {
-                        Text(e.pinyin).font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.slate)
-                        Text(e.char).font(Fonts.hanzi(24))
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-            }
+            practice
             Button(action: onGo) {
                 Text(buttonText).font(Fonts.display(24)).frame(maxWidth: .infinity).frame(height: 50)
                     .background(region.playable ? Palette.gold : Palette.mist2).foregroundStyle(Palette.ink)
                     .overlay(Rectangle().stroke(Palette.ink, lineWidth: 3))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.pop)
             .disabled(!region.playable)
             .accessibilityIdentifier("regionGo")
-            if stationLine != nil, let onRestart {
-                Button { confirmRestart = true } label: {
-                    Text("从头开始").font(.system(size: 15, weight: .bold)).foregroundStyle(Palette.slate)
-                        .frame(maxWidth: .infinity).frame(height: 30)
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("regionRestart")
-                .confirmationDialog("这一趟从第一站重新走？", isPresented: $confirmRestart, titleVisibility: .visible) {
-                    Button("从头开始", action: onRestart)
-                    Button("接着走", role: .cancel) {}
-                } message: {
-                    Text("秘籍和收过的词卡都留着。")
-                }
-            }
         }
         .padding(18)
         .background(Color.white)
@@ -73,7 +55,25 @@ struct RegionSheet: View {
         .padding(.horizontal, 12).padding(.bottom, 16)
     }
 
-    var stateText: String { ["未挑战", "挑战中", "已挑战"][phase == .untouched ? 0 : phase == .inProgress ? 1 : 2] }
+    /// 练什么：大字写这一关的韵母（红色），下面一句说明（内容包里的 summary）；书面语，不说「容易混」，不放格子、不出汉字。
+    private var practice: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("这一关练").font(.system(size: 13, weight: .black)).foregroundStyle(Palette.slate)   // 和碑文页同一个标签
+            Text(region.hint).font(Fonts.display(26)).foregroundStyle(Palette.red)
+            Text(region.summary ?? region.difficulty).font(.system(size: 14, weight: .semibold)).foregroundStyle(Palette.slate)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+
+    /// 「75 个音节 · 1187 张词卡」；去过以后词卡写已集几张。
+    var factsLine: String {
+        let syl = "\(syllables) 个\(firstRegion ? "" : "新")音节"
+        let card = phase == .untouched ? "\(total) 张词卡" : "词卡已集 \(cards) / \(total)"
+        return syllables > 0 ? "\(syl) · \(card)" : card
+    }
+
+    var stateText: String { ["未挑战", "挑战中", "已打通"][phase == .untouched ? 0 : phase == .inProgress ? 1 : 2] }
 
     var stateColor: Color { phase == .inProgress ? Palette.green : phase == .cleared ? Palette.red : Palette.slate }
 

@@ -6,6 +6,8 @@ struct DuelScreen: View {
     @State var c: DuelController
     /// 旅程：开打前先排好这一场（设好 c.plan）。
     var prepare: (() -> Void)? = nil
+    /// 暂停卡片上的「退出比武」回哪里；nil = 没有退出（开场教学、单独的比武 App）。
+    var onQuit: (() -> Void)? = nil
     @State private var showPanel = false
     @State private var cardFrames: [Int: CGRect] = [:]
     @State private var battleFrame: CGRect = .zero
@@ -16,7 +18,8 @@ struct DuelScreen: View {
     var body: some View {
         VStack(spacing: 0) {
             StatusBarView(c: c)
-                .overlay(PanelGesture { showPanel = true })
+                // 三连点开调参：只盖左边（「你」和血条那块），中间的暂停键要能点到（整条盖住时 UIKit 的视图把点按吞了）
+                .overlay(alignment: .leading) { PanelGesture { showPanel = true }.frame(width: 120) }
             Rectangle().fill(Palette.ink).frame(height: 3)
             ZStack(alignment: .topLeading) {
                 SpriteView(scene: c.scene, preferredFramesPerSecond: 120, options: [.ignoresSiblingOrder])
@@ -85,6 +88,9 @@ struct DuelScreen: View {
                         c.sounds.play(.levelup)
                         c.sounds.play(.hitHeavy)
                         c.sounds.hitHaptic(heavy: true)
+                    }, onTick: { i in
+                        c.sounds.tick(i)
+                        c.sounds.hitHaptic(heavy: i >= 7)
                     }, actions: c.summaryActions) { c.restart() }
                 }
                 .transition(.opacity)
@@ -93,14 +99,32 @@ struct DuelScreen: View {
         .overlay {
             if c.pausedForBackground {
                 ZStack {
-                    Color.black.opacity(0.4).ignoresSafeArea(edges: .top)
-                    Button { c.resumeFromBackground() } label: {
-                        Text("继续").font(Fonts.display(30)).padding(.horizontal, 40).padding(.vertical, 12)
-                            .background(Palette.gold).foregroundStyle(Palette.ink)
-                            .overlay(Rectangle().stroke(Palette.ink, lineWidth: 3))
+                    Color.black.opacity(0.45).ignoresSafeArea(edges: .top)
+                    VStack(spacing: 14) {
+                        if c.pausedByPlayer {
+                            Text("暂停").font(Fonts.display(30)).foregroundStyle(.white)
+                        }
+                        Button { c.resumeFromBackground() } label: {
+                            Text("继续").font(Fonts.display(30)).frame(width: 200).padding(.vertical, 12)
+                                .background(Palette.gold).foregroundStyle(Palette.ink)
+                                .overlay(Rectangle().stroke(Palette.ink, lineWidth: 3))
+                        }
+                        .buttonStyle(.pop)
+                        .accessibilityIdentifier("continue")
+                        if c.pausedByPlayer, let onQuit {
+                            Button {
+                                c.quitDuel()
+                                onQuit()
+                            } label: {
+                                Text("退出比武").font(Fonts.display(22)).frame(width: 200).padding(.vertical, 10)
+                                    .background(Color.white).foregroundStyle(Palette.ink)
+                                    .overlay(Rectangle().stroke(Palette.ink, lineWidth: 3))
+                            }
+                            .buttonStyle(.pop)
+                            .accessibilityIdentifier("quitDuel")
+                            Text("这一场不算输赢，随时再来").font(.system(size: 13, weight: .bold)).foregroundStyle(.white.opacity(0.8))
+                        }
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("continue")
                 }
             }
         }
@@ -115,6 +139,8 @@ struct DuelScreen: View {
             if let prepare { prepare() } else { c.plan = nil }
             c.start()
         }
+        // 离开比武就收起结算：不然下一场进来、start() 清掉它之前，会闪一下上一场的结算页
+        .onDisappear { c.clearSummary() }
         .modifier(Lifecycle(c: c))
     }
 

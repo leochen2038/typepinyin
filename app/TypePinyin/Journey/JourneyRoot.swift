@@ -5,6 +5,32 @@ import SwiftUI
 struct JourneyRoot: View {
     @State var j: JourneyController
 
+    /// 这一屏放哪首配乐：比武时不放（比武有自己的配乐），打碑文、奇遇、文章放静版，其余放「江湖」。
+    var ambientTrack: AmbientMusic.Track? {
+        switch j.screen {
+        case .opening(let n): return n == 0 && !j.openingLineShown ? .map : nil
+        case .region:
+            switch j.regionStage {
+            case .duel: return nil
+            case .stele, .encounter: return .calm
+            case .scroll: return .map
+            }
+        case .practice:
+            switch j.practiceStage {
+            case .duel: return nil
+            case .text: return .calm
+            case .card: return .map
+            }
+        case .gathering:
+            switch j.gatheringStage {
+            case .duel: return nil
+            case .stele: return .calm
+            default: return .map
+            }
+        default: return .map
+        }
+    }
+
     var body: some View {
         Group {
             switch j.screen {
@@ -42,7 +68,7 @@ struct JourneyRoot: View {
                             .accessibilityIdentifier("stele")
                     }
                 case .duel:
-                    DuelScreen(c: j.duel, prepare: { j.startStationDuel() })
+                    DuelScreen(c: j.duel, prepare: { j.startStationDuel() }, onQuit: { j.regionStage = .scroll })
                         .id("station-\(j.duelToken)")   // 不用站号：打赢时进度先存、站号就变了，结算还没看完比武画面不能重建
                 case .encounter:
                     if let e = j.encounter(j.currentStation?.encounterId) {
@@ -63,7 +89,7 @@ struct JourneyRoot: View {
                 case .card:
                     PracticeView(j: j)
                 case .duel:
-                    DuelScreen(c: j.duel, prepare: { j.startPracticeDuel() })
+                    DuelScreen(c: j.duel, prepare: { j.startPracticeDuel() }, onQuit: { j.practiceStage = .card })
                         .id("practice-\(j.duelToken)")
                 case .text(let id):
                     if let e = j.encounter(id) {
@@ -87,6 +113,9 @@ struct JourneyRoot: View {
             }
         }
         .overlay { InkCurtainHost(phase: j.inkPhase, since: j.inkSince).ignoresSafeArea() }
+        .onChange(of: ambientTrack, initial: true) { _, t in
+            if !AppResources.isUITest { j.duel.ambient.play(t) }
+        }
         .sheet(isPresented: $j.showPanel) { TuningPanelView(c: j.duel) }
         .alert("进度没读到，从头开始", isPresented: $j.showRecoveredNotice) {
             Button("好", role: .cancel) {}

@@ -70,6 +70,10 @@ struct TuningPanelView: View {
         I(label: "词卡熟练：累计几场打对", kp: \.learning.fluentDuels, range: 1...6),
         I(label: "词卡精通：累计几场打对", kp: \.learning.masterDuels, range: 2...10),
         I(label: "秘籍怎么升级（1 打牌涨经验 / 0 原来按词卡；重开生效）", kp: \.learning.bookLevels, range: 0...1),
+        I(label: "秘籍升 2 级要的经验", kp: \.learning.bookXP2, range: 20...2000),
+        I(label: "秘籍升 3 级要的经验", kp: \.learning.bookXP3, range: 50...5000),
+        I(label: "秘籍升 4 级要的经验", kp: \.learning.bookXP4, range: 100...8000),
+        I(label: "秘籍升 5 级要的经验", kp: \.learning.bookXP5, range: 200...12000),
         I(label: "熟练要几个不同的日子", kp: \.learning.fluentDays, range: 1...5),
         I(label: "熟练看最近几次", kp: \.learning.fluentRecent, range: 1...10),
         I(label: "精通看最近几次", kp: \.learning.masterRecent, range: 1...10),
@@ -225,7 +229,7 @@ struct TuningPanelView: View {
                     Text("出招前先往后退、压扁、后仰攒劲，再冲出去拉长、到位一抖。0.75 秒是原版速度，越短越利落。")
                 }
                 Section("声音") {
-                    Toggle("音乐", isOn: Binding(get: { c.music.on }, set: { c.music.on = $0 }))
+                    Toggle("音乐", isOn: Binding(get: { c.music.on }, set: { c.music.on = $0; c.ambient.on = $0 }))
                     Toggle("音效", isOn: Binding(get: { c.sounds.soundOn }, set: { c.sounds.soundOn = $0 }))
                 }
                 Section {
@@ -284,6 +288,13 @@ struct TuningPanelView: View {
                 }
                 Section {
                     Button("日子 +1（现在偏移 \(DayClock.offset) 天）") { DayClock.advanceOneDay(); dayTick += 1 }
+                    Toggle("日历（收获页的日历卡片）", isOn: $t.calendarOn)
+                    Toggle("勋章（收获页的勋章卡片、结算发勋章）", isOn: $t.badgesOn)
+                    Toggle("地图小卷轴（盖印、落勋章都在这里演）", isOn: $t.dailyScrollOn)
+                    Button("再看一次今天的小卷轴") { c.journey?.replayDailyScroll(); dismiss() }
+                    Button("看今天那格描虚线（不改记录）") { c.journey?.previewTodayTrace(); dismiss() }
+                    Button("清空勋章") { c.journey?.resetBadges() }
+                    Button("重新补发一次勋章（回地图出卡片）") { c.journey?.redoBackfill() }
                     Toggle("跳过旅程动画", isOn: Binding(get: { JourneyFlags.fast }, set: { JourneyFlags.fast = $0 }))
                     Picker("开场（清空进度后生效）", selection: $t.openingStyle) {
                         Text("碑文").tag(1)
@@ -309,7 +320,7 @@ struct TuningPanelView: View {
                 } header: {
                     Text("旅程（试玩）")
                 } footer: {
-                    Text("清空进度会删掉这台手机上的全部旅程进度（学会的音节、秘籍、走到哪），下次打开从初入江湖开始，用来换人试玩。日子 +1 用来试熟练、复习和每天新学的上限。标为拿到：直接把某几卷算作拿到、对应地区算打通，用来看十方印和升重。")
+                    Text("清空进度会删掉这台手机上的全部旅程进度（学会的音节、秘籍、走到哪、日历、勋章），下次打开从初入江湖开始，用来换人试玩。日子 +1 用来试熟练、复习和每天新学的上限。标为拿到：直接把某几卷算作拿到、对应地区算打通，用来看十方印和升重。")
                 }
                 .id(dayTick)
                 .confirmationDialog("清空这台手机上的全部旅程进度？", isPresented: $confirmReset, titleVisibility: .visible) {

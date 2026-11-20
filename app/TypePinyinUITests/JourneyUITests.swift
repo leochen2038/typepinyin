@@ -51,4 +51,23 @@ final class JourneyUITests: XCTestCase {
         XCTAssertTrue(passage.waitForExistence(timeout: 5), "返回到练习场的文章")
     }
 
+    /// 日历、勋章：打完葫芦集碑（文字也算一场）就算练过一天，收获页的日历卡片盖上印、勋章卡片有勋章和「新」。
+    func testSteleCountsForCalendarAndBadges() {
+        var app = XCUIApplication()
+        app.launchArguments = ["-uiTestMode", "-fastJourney", "-autoplay", "-recordAutoplay", "-resetJourney"]
+        app.launch()
+        XCTAssertTrue(app.buttons["继续"].waitForExistence(timeout: 120), "打完葫芦集碑，再打完第一站的结算")
+        app.terminate()
+        app = XCUIApplication()
+        app.launchArguments = ["-uiTestMode", "-fastJourney", "-codex"]
+        app.launch()
+        let cal = app.buttons["calendarCard"]
+        XCTAssertTrue(cal.waitForExistence(timeout: 15))
+        XCTAssertTrue(cal.label.contains("一共 1 天"), cal.label)
+        let badges = app.buttons["badgeCard"]
+        XCTAssertTrue(badges.label.contains("2 枚") && badges.label.contains("有新勋章"), badges.label)   // 打几场 1 场、来了几天 1 天（2 场还不到 5 场）
+        badges.tap()
+        XCTAssertTrue(app.staticTexts["收齐了"].exists == false)
+        XCTAssertTrue(app.buttons["收获"].waitForExistence(timeout: 5), "勋章页左上角「收获」回来")
+    }
 }

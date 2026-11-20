@@ -184,7 +184,10 @@ public struct Region: Codable, Sendable, Hashable, Identifiable {
     public var volume: String
     public var scene: String
     public var hint: String
+    /// 碑文页「这一关练」下面的说明（两三句）。
     public var difficulty: String
+    /// 地图卡片上练什么的一句话；nil = 用 difficulty。
+    public var summary: String?
     public var examples: [RegionExample]
     public var boss: Fighter
     public var foes: [Fighter]

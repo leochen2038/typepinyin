@@ -12,6 +12,8 @@ struct RegionView: View {
     @State private var asking = false
     @State private var banner = false
     @State private var busy = false
+    /// 进场或走路时秘籍演出还在：收下后接着进场。
+    @State private var afterObtain = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var fast: Bool { JourneyFlags.fast || reduceMotion }
@@ -60,7 +62,9 @@ struct RegionView: View {
                         ObtainVolumeView(volume: v, rank: j.rank(of: v),
                                          name: j.xpLevels ? j.bookName(v) : nil, level: j.xpLevels ? j.levelText(j.rank(of: v)) : nil,
                                          seal: j.obtainedIsSeal ? String(region.name.prefix(1)) : nil,
-                                         boss: j.obtainedIsSeal || !j.obtainAtStele ? region.boss.defeatLine.map { (region.boss.name, $0) } : nil) { j.obtained = nil }
+                                         boss: j.obtainedIsSeal || !j.obtainAtStele ? region.boss.defeatLine.map { (region.boss.name, $0) } : nil,
+                                         onStamp: { j.duel.sounds.play(.hitHeavy); j.duel.sounds.finisherHaptic() },
+                                         onReveal: { j.duel.sounds.play(.levelup) }) { j.obtained = nil }
                             .transition(.opacity)
                     }
                     if let up = j.rankUp, j.obtained == nil {
@@ -81,6 +85,11 @@ struct RegionView: View {
                 }
                 .onAppear { arrive(height: viewH, width: w) }
                 .onChange(of: j.walkFrom) { _, from in if from != nil { walk(height: viewH, width: w) } }
+                .onChange(of: j.obtained) { _, v in                     // 秘籍收下了：接着进场（镜头、走到第一站）
+                    guard v == nil, afterObtain else { return }
+                    afterObtain = false
+                    arrive(height: viewH, width: w)
+                }
                 .onChange(of: j.debugJumpTick) { _, _ in
                     busy = false
                     banner = false
@@ -124,6 +133,12 @@ struct RegionView: View {
     /// 进来时：第一次先从掌门摇到山脚、出地名横幅；然后说过场、开打。
     func arrive(height: CGFloat, width: CGFloat) {
         guard let route = j.route else { return }
+        if j.obtained != nil, !fast {                           // 打完碑文进来先拿秘籍：点「收下」之后镜头才动、人物才走
+            cameraY = cameraFor(Double(j.walkFrom ?? j.stationIndex), count: route.stations.count, height: height, width: width)
+            hero = Double(j.walkFrom ?? j.stationIndex)
+            afterObtain = true
+            return
+        }
         let n = route.stations.count
         hero = Double(j.stationIndex)
         let target = cameraFor(hero, count: n, height: height, width: width)
@@ -160,6 +175,7 @@ struct RegionView: View {
     /// 接着走：画面跟着小人走到下一站（两三秒，点一下跳过）。
     func walk(height: CGFloat, width: CGFloat) {
         guard let from = j.walkFrom, let route = j.route else { return }
+        if j.obtained != nil, !fast { afterObtain = true; return }   // 秘籍演出还在：收下后再走（arrive 会接着走）
         let n = route.stations.count
         let to = Double(j.stationIndex)
         hero = Double(from)
@@ -314,9 +330,8 @@ struct RegionCard: View {
             Text(label).font(Fonts.display(22)).frame(maxWidth: .infinity).frame(height: 50)
                 .background(primary ? Palette.gold : Color.white).foregroundStyle(Palette.ink)
                 .overlay(Rectangle().stroke(Palette.ink, lineWidth: 3))
-                .compositingGroup().shadow(color: Palette.ink, radius: 0, x: 3, y: 3)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pop)
         .accessibilityIdentifier(label)
     }
 }

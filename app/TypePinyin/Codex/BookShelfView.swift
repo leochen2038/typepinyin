@@ -1,7 +1,8 @@
 import LearningCore
 import SwiftUI
 
-/// 秘籍页（按经验升级时用）：第一层是书架，十本秘籍按岛的顺序排，一座岛一本；点开一本是第二层。
+/// 收获页（按经验升级时用）：顶上四格数字，下面「日历」「勋章」两张卡片，再下面是书架。
+/// 书架上十本秘籍按岛的顺序排，一座岛一本；点开一本是第二层（左上角「书架」回来），点日历、勋章卡片也是第二层（左上角「收获」回来）。
 /// 书架上每本写：名字（用岛名叫）、练什么、打过几个音节、几张词卡、几级和经验条；打赢过掌门的封面上盖印。
 /// 没拿到的缩成一行灰条。只写已有的，不写总数、不写还差多少。
 struct BookShelfView: View {
@@ -11,18 +12,31 @@ struct BookShelfView: View {
         let a = ProcessInfo.processInfo.arguments
         return a.firstIndex(of: "-codexBook").flatMap { $0 + 1 < a.count ? a[$0 + 1] : nil }
     }()
+    /// 日历页、勋章页（从收获页顶上两张卡片进）。开发用：-harvestPage calendar / badges 直接打开。
+    enum Sub { case calendar, badges }
+    @State private var sub: Sub? = {
+        let a = ProcessInfo.processInfo.arguments
+        switch a.firstIndex(of: "-harvestPage").flatMap({ $0 + 1 < a.count ? a[$0 + 1] : nil }) {
+        case "calendar": return .calendar
+        case "badges": return .badges
+        default: return nil
+        }
+    }()
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
-                Button { if open != nil { open = nil } else { j.screen = .map } } label: {
-                    Text(open == nil ? "回江湖" : "书架").font(.system(size: 15, weight: .black)).foregroundStyle(Palette.ink)
+                Button {
+                    if open != nil { open = nil } else if sub != nil { sub = nil } else { j.screen = .map }
+                } label: {
+                    Text(open != nil ? "书架" : sub != nil ? "收获" : "回江湖").font(.system(size: 15, weight: .black)).foregroundStyle(Palette.ink)
                         .padding(.horizontal, 10).padding(.vertical, 6)
                         .background(Color.white).overlay(Rectangle().stroke(Palette.ink, lineWidth: 2))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.popSmall)
                 .accessibilityIdentifier("codexBack")
-                Text(open.map(j.bookName) ?? "秘籍").font(Fonts.display(26))
+                Text(open.map(j.bookName) ?? (sub == .calendar ? "日历" : sub == .badges ? "勋章" : "收获")).font(Fonts.display(26))
                     .overlay(PanelGesture { j.showPanel = true })
                 Spacer()
             }
@@ -31,22 +45,49 @@ struct BookShelfView: View {
             .overlay(alignment: .bottom) { Rectangle().fill(Palette.ink).frame(height: 3) }
             if let v = open {
                 BookDetailView(j: j, volume: v).id(v)
+            } else if sub == .calendar {
+                CalendarPage(j: j)
+            } else if sub == .badges {
+                BadgeBookView(j: j)
             } else {
                 shelf
             }
         }
-        .background(Palette.mist)
-        .onAppear { j.markCodexSeen(books: j.booksToUnveil) }
+        .background(SkyPage())
+        .onAppear {
+            j.markCodexSeen(books: j.booksToUnveil)
+            if let p = j.openHarvestPage {
+                sub = p == "badges" ? .badges : .calendar
+                j.openHarvestPage = nil
+            }
+        }
+    }
+
+    /// 刚点的那本：轻点太快时系统来不及显示按住，抬手后补一下沉到底（0.06 秒），再弹上来的同时翻开。
+    @State private var tapped: String?
+
+    private func release(_ v: String) {
+        tapped = v
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(0.06))
+            tapped = nil
+            open = v
+        }
     }
 
     private var shelf: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 6) {
-                GainsPanel(j: j).padding(.bottom, 6)
+            VStack(alignment: .leading, spacing: 10) {
+                GainsPanel(j: j).padding(.bottom, 4)
+                entryCards.padding(.bottom, 4)
+                shelfTitle
                 ForEach(j.content.regions.filter(\.playable), id: \.id) { r in
                     if j.progress.volumes[r.volume]?.obtained == true {
-                        Button { open = r.volume } label: { row(r) }
-                            .buttonStyle(.plain)
+                        // 系统按钮（滚动、取消都由系统管，滑动后第一下就能点）+ 自己的按下样式（不变灰）：
+                        // 按住时沉下去；轻点太快系统来不及显示按住的，抬手后补一下沉到底再翻开
+                        Button { release(r.volume) } label: { row(r) }
+                            .buttonStyle(ShelfPress(forced: tapped == r.volume))
+                            .padding(.trailing, 4).padding(.bottom, 4)
                             .accessibilityIdentifier("book-\(r.volume)")
                     } else {
                         lockedRow(r)
@@ -57,41 +98,107 @@ struct BookShelfView: View {
         }
     }
 
+    /// 收获页顶上两张卡片：左「日历」、右「勋章」（各有开关，关掉的不出）。能点，所以有投影、按下去会沉。
+    /// 放大字体时压成一行，不画七格和勋章图。
+    @ViewBuilder private var entryCards: some View {
+        let compact = typeSize >= .xxLarge
+        if j.calendarOn || j.badgesOn {
+            HStack(alignment: .top, spacing: 12) {
+                if j.calendarOn {
+                    Button { sub = .calendar } label: {
+                        if compact {
+                            let w = j.practicedThisWeek, total = j.practicedDays.count
+                            CompactHarvestCard(title: "日历", line: w > 0 ? "本周 \(w) 天" : total > 0 ? "共 \(total) 天" : "打完一场就盖印")
+                        } else {
+                            CalendarCard(j: j)
+                        }
+                    }
+                    .buttonStyle(ShelfPress())
+                    .accessibilityIdentifier("calendarCard")
+                }
+                if j.badgesOn {
+                    Button { sub = .badges } label: {
+                        if compact {
+                            CompactHarvestCard(title: "勋章", line: "\(j.progress.badges.count) 枚", dot: j.hasNewBadges)
+                        } else {
+                            BadgeCard(j: j)
+                        }
+                    }
+                    .buttonStyle(ShelfPress())
+                    .accessibilityIdentifier("badgeCard")
+                }
+            }
+            .padding(.trailing, 4)
+        }
+    }
+
+    /// 书架标题：「书架」+ 拿到几本、盖了几个掌门印（只写已有的）。
+    private var shelfTitle: some View {
+        let regions = j.content.regions.filter(\.playable)
+        let got = regions.filter { j.progress.volumes[$0.volume]?.obtained == true }.count
+        let sealed = regions.filter { j.cleared($0.id) }.count
+        return HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text("书架").font(Fonts.display(22))
+            Text("\(got) 本秘籍\(sealed > 0 ? " · \(sealed) 个掌门印" : "")").font(.system(size: 12, weight: .black)).foregroundStyle(Palette.slate)
+            Spacer()
+        }
+        .padding(.top, 2)
+    }
+
+    /// 书架上的一本（2026-11-18 改版）：白卡片、粗黑边；投影和按下去由按钮样式给（能点的才有投影）；
+    /// 左边一条这本书封面的颜色，封面放大、盖着掌门印；名字用标题字，经验条是比武里那种斜条；
+    /// 等级是右边一块封面色的方牌（数字大、「级」小）。
     private func row(_ r: Region) -> some View {
         let v = r.volume
-        let recent = j.progress.journey.lastRegion == r.id && !j.cleared(r.id)
+        let color = BookCover.colors(v).cover
+        let rank = j.rank(of: v)
         return HStack(spacing: 12) {
             BookCover(title: "", seal: j.cleared(r.id) ? String(r.name.prefix(1)) : "", sealColor: Palette.red, dim: false, volume: v)
-                .frame(width: 38, height: 52)
-            VStack(alignment: .leading, spacing: 4) {
+                .frame(width: 46, height: 63)
+            VStack(alignment: .leading, spacing: 5) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(j.bookName(v)).font(.system(size: 16, weight: .black))
-                    Text("练 \(r.hint)").font(.system(size: 11, weight: .bold)).foregroundStyle(recent ? Palette.red : Palette.slate)
+                    Text(j.bookName(v)).font(Fonts.display(21)).lineLimit(1)
+                    Text(r.hint).font(.system(size: 11, weight: .black)).foregroundStyle(Palette.slate)
                         .lineLimit(1).minimumScaleFactor(0.7)
                 }
                 Text("打过 \(j.typedSyllables(in: v)) 个音节 · \(j.cardCount(in: v)) 张词卡")
                     .font(.system(size: 12, weight: .bold)).foregroundStyle(Palette.slate).monospacedDigit()
-                XPBar(progress: j.bookProgress(v), height: 8)
+                SkewBar(value: j.bookProgress(v), color: Palette.xp, height: 9, skew: -0.25, border: 2)
+                    .padding(.trailing, 4)
             }
-            Text(j.levelText(j.rank(of: v))).font(Fonts.display(22))
+            VStack(spacing: -2) {
+                Text("\(max(1, rank))").font(Fonts.display(30)).foregroundStyle(.white)
+                Text("级").font(.system(size: 11, weight: .black)).foregroundStyle(.white.opacity(0.9))
+            }
+            .frame(width: 48, height: 56)
+            .background(color)
+            .overlay(Rectangle().stroke(Palette.ink, lineWidth: 2.5))
+            .rotationEffect(.degrees(-3))
         }
-        .padding(.horizontal, 10).padding(.vertical, 7)
-        .background(Color.white)
-        .overlay(Rectangle().stroke(recent ? Palette.red : Palette.ink, lineWidth: recent ? 2.5 : 2))
+        .padding(.leading, 18).padding(.trailing, 12).padding(.vertical, 10)
+        .background(alignment: .leading) {
+            ZStack(alignment: .leading) {
+                Color.white
+                Rectangle().fill(color).frame(width: 8)
+            }
+        }
+        .overlay(Rectangle().stroke(Palette.ink, lineWidth: 2.5))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(j.bookName(v))，\(j.levelText(j.rank(of: v)))\(j.cleared(r.id) ? "，掌门盖过印" : "")")
     }
 
+    /// 还没拿到的：虚线框、灰色书脊，不占地方。
     private func lockedRow(_ r: Region) -> some View {
         HStack(spacing: 12) {
             Rectangle().fill(Color(hex: 0xD9D9D6)).frame(width: 22, height: 30)
-                .overlay(Rectangle().stroke(Palette.slate2, lineWidth: 2)).padding(.horizontal, 8)
-            Text(r.name + "秘籍").font(.system(size: 15, weight: .black)).foregroundStyle(Palette.slate2)
+                .overlay(Rectangle().stroke(Palette.slate2, lineWidth: 2)).padding(.horizontal, 12)
+            Text(r.name + "秘籍").font(Fonts.display(17)).foregroundStyle(Palette.slate2)
             Spacer()
         }
         .padding(.horizontal, 10).padding(.vertical, 6)
-        .background(Color.white.opacity(0.6))
-        .overlay(Rectangle().stroke(Palette.faint, lineWidth: 1.5))
+        .background(Color.white.opacity(0.45))
+        .overlay(Rectangle().stroke(Palette.slate2.opacity(0.7), style: StrokeStyle(lineWidth: 1.5, dash: [5, 3])))
+        .padding(.trailing, 4)
         .accessibilityIdentifier("locked-\(r.volume)")
     }
 }
@@ -105,7 +212,7 @@ struct XPBar: View {
         GeometryReader { g in
             ZStack(alignment: .leading) {
                 Rectangle().fill(Palette.mist2)
-                Rectangle().fill(Palette.red).frame(width: g.size.width * min(1, max(0, progress)))
+                Rectangle().fill(Palette.xp).frame(width: g.size.width * min(1, max(0, progress)))
             }
             .overlay(Rectangle().stroke(Palette.ink, lineWidth: 2))
         }
@@ -113,15 +220,16 @@ struct XPBar: View {
     }
 }
 
-/// 一本秘籍：封面、等级和经验条；「试看」一行（练到的等级能点，没练到的是灰的，点了只提示）；下面分「音节」「词卡」两栏，先看音节。
+/// 一本秘籍：封面、等级和经验条；「各级效果」一行（1–5 级都能点着看，2026-11-20 放开等级限制）；下面分「音节」「词卡」两栏，先看音节。
 struct BookDetailView: View {
     @State var j: JourneyController
     let volume: String
     @State private var tab = 0
     @State private var shown: Int
-    @State private var note: String?
     @State private var demo = DemoRun(id: 0, at: Date.distantFuture.timeIntervalSinceReferenceDate)
     @State private var picked: String?
+    /// 各级效果的声音（换一级或离开时取消，免得两串声音叠在一起）。
+    @State private var soundJob: Task<Void, Never>?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     struct DemoRun: Equatable { var id: Int; var at: Double }
@@ -138,7 +246,7 @@ struct BookDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 14) {
                 header
                 preview
                 HStack(spacing: 6) {
@@ -166,18 +274,20 @@ struct BookDetailView: View {
                     Text("练 \(j.bookFocus(volume))").font(.system(size: 12, weight: .bold)).foregroundStyle(Palette.slate)
                         .lineLimit(1).minimumScaleFactor(0.7)
                 }
-                XPBar(progress: j.bookProgress(volume))
+                SkewBar(value: j.bookProgress(volume), color: Palette.xp, height: 11, skew: -0.25, border: 2).padding(.trailing, 4)
                 Text("打这本秘籍的牌就涨经验，打得干净、打得快涨得多")
                     .font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.slate)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(12)
-        .background(Color.white)
-        .overlay(Rectangle().stroke(Palette.ink, lineWidth: 2))
+        .padding(12).padding(.top, 6)
+        .background(alignment: .top) {
+            ZStack(alignment: .top) { Color.white; Rectangle().fill(BookCover.colors(volume).cover).frame(height: 8) }
+        }
+        .popPanel()
     }
 
-    // MARK: 试看
+    // MARK: 各级效果
 
     /// 示范词牌上的词：岛名（拼音在内容里有）。
     private var demoCard: DuelController.CardVM {
@@ -192,23 +302,23 @@ struct BookDetailView: View {
         let theme = RankFx.theme(volume).name
         return VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text("试看").font(Fonts.display(18))
-                Text(note ?? "\(shown) 级\(shown == rank ? "，现在用的" : "")：打中时爆 \(pieces[shown]) 片\(theme)")
-                    .font(.system(size: 12, weight: note == nil ? .semibold : .black))
-                    .foregroundStyle(note == nil ? Palette.slate : Palette.ink)
+                Text("各级效果").font(Fonts.display(18))
+                Text("\(shown) 级\(shown == rank ? "（当前）" : "")：打中时爆 \(pieces[shown]) 片\(theme)")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Palette.slate)
             }
             HStack(spacing: 6) {
                 ForEach(1...BookXP.maxLevel, id: \.self) { n in
-                    let owned = n <= rank, on = n == shown
+                    let on = n == shown
                     Button { tapLevel(n) } label: {
                         Text("\(n) 级").font(.system(size: 14, weight: .black))
                             .frame(maxWidth: .infinity).frame(height: 44)
-                            .foregroundStyle(on ? Color.white : owned ? Palette.ink : Palette.slate2)
-                            .background(on ? Palette.ink : owned ? Color.white : Palette.mist)
-                            .overlay(Rectangle().stroke(owned ? Palette.ink : Palette.faint, lineWidth: 2))
+                            .foregroundStyle(on ? Color.white : Palette.ink)
+                            .background(on ? Palette.ink : Color.white)
+                            .overlay(Rectangle().stroke(Palette.ink, lineWidth: 2))
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(owned ? "试看 \(n) 级" : "\(n) 级，还没练到")
+                    .accessibilityLabel("看 \(n) 级的效果\(n == rank ? "，当前等级" : "")")
                     .accessibilityIdentifier("previewLevel-\(n)")
                 }
             }
@@ -231,29 +341,37 @@ struct BookDetailView: View {
         }
         .padding(12)
         .background(Color.white)
-        .overlay(Rectangle().stroke(Palette.ink, lineWidth: 2))
+        .popPanel()
         .zIndex(1)
         .onAppear { play() }
+        .onDisappear { soundJob?.cancel() }
     }
 
     private func tapLevel(_ n: Int) {
-        guard n <= rank else {                                // 没练到的：不播放，只说一句
-            note = "练到 \(n) 级就能看"
-            Task { @MainActor in
-                try? await Task.sleep(for: .seconds(1.8))
-                note = nil
-            }
-            return
-        }
-        note = nil
         shown = n
         play()
     }
 
+    /// 播一遍：字母一个个爆开时一个字母一声「嗒」（音调一个比一个高，和结算页经验条同一套），爆完收一声：1–3 级轻击、4–5 级重击。
     private func play() {
         guard !reduceMotion else { return }
-        demo = DemoRun(id: demo.id + 1, at: Date().timeIntervalSinceReferenceDate + 0.25)
+        let start = Date().timeIntervalSinceReferenceDate + 0.25
+        demo = DemoRun(id: demo.id + 1, at: start)
         j.duel.sounds.hitHaptic(heavy: false)
+        soundJob?.cancel()
+        let letters = demoCard.syllables.joined().count, level = shown
+        soundJob = Task { @MainActor in
+            for i in 0..<letters {
+                let wait = start + Double(i) * 0.09 - Date().timeIntervalSinceReferenceDate
+                if wait > 0 { try? await Task.sleep(for: .seconds(wait)) }
+                if Task.isCancelled { return }
+                j.duel.sounds.tick(min(i, 6))
+            }
+            try? await Task.sleep(for: .seconds(0.12))
+            if Task.isCancelled { return }
+            j.duel.sounds.play(level >= 4 ? .hitHeavy : .hitLight)
+            j.duel.sounds.hitHaptic(heavy: level >= 4)
+        }
     }
 
     private func tabButton(_ label: String, _ k: Int) -> some View {
@@ -304,7 +422,7 @@ struct BookDetailView: View {
         }
         .padding(10)
         .background(Color.white)
-        .overlay(Rectangle().stroke(Palette.ink, lineWidth: 2))
+        .popPanel()
     }
 
     private func cell(_ s: String, typed: Bool, width: CGFloat) -> some View {
@@ -355,5 +473,27 @@ extension JourneyController {
     /// 归这本秘籍的词卡（一个词只归一关），最近打过的在前。
     func ownedCards(in volume: String) -> [PracticeWord] {
         cards.filter { content.owner(of: $0.syllables) == volume }.sorted { $0.lastSeen > $1.lastSeen }
+    }
+}
+
+extension View {
+    /// 秘籍页的面板：粗黑边，不加投影（投影只给能点的按钮，2026-11-19）。
+    func popPanel() -> some View {
+        overlay(Rectangle().stroke(Palette.ink, lineWidth: 2.5))
+    }
+}
+
+
+/// 书架上一本秘籍的按下样式：按住（或抬手后补的那一下）往右下沉、盖住投影，松开弹回；按下时轻震。不变灰。
+struct ShelfPress: ButtonStyle {
+    var forced = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        let down = configuration.isPressed || forced
+        configuration.label
+            .offset(x: down ? 4 : 0, y: down ? 4 : 0)
+            .background(Rectangle().fill(Palette.ink).offset(x: 4, y: 4))
+            .animation(.spring(duration: down ? 0.05 : 0.18, bounce: down ? 0 : 0.5), value: down)
+            .sensoryFeedback(.impact(weight: .light), trigger: down) { _, new in new }
     }
 }

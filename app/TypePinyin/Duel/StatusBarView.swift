@@ -11,6 +11,7 @@ struct StatusBarView: View {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text("你").font(Fonts.display(22))
                     Text("渐入佳境").font(.system(size: 11, weight: .bold)).foregroundStyle(Palette.slate)
+                        .lineLimit(1).minimumScaleFactor(0.75)
                 }
                 SkewBar(value: Double(c.playerHP) / Double(max(1, c.playerMaxHP)), color: Palette.navy, height: 12, skew: -0.25, hitTrail: true)
                     .overlay(alignment: .trailing) { HurtFloat(hurt: c.hurt) }
@@ -25,14 +26,25 @@ struct StatusBarView: View {
             VStack(spacing: 3) {
                 Text(timeText).font(Fonts.display(22)).monospacedDigit()
                 // 不写「上一场 1:17」：对手血量按手速换算，一场总在 75 秒上下，比用时没有意义
-                Text("比武").font(.system(size: 10, weight: .black)).foregroundStyle(.white)
-                    .padding(.horizontal, 5).padding(.vertical, 1).background(Palette.ink)
+                // 暂停键（2026-11-18，替换原来的「比武」小标签）：白底黑边，和「回江湖」同一个按钮样子；点的范围放大到 44
+                Button { c.pauseByPlayer() } label: {
+                    PauseGlyph().frame(width: 28, height: 22)
+                        .background(Color.white).overlay(Rectangle().stroke(Palette.ink, lineWidth: 2))
+                        .padding(.horizontal, 8).padding(.vertical, 11)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(PopButtonStyle(depth: 3, inset: EdgeInsets(top: 11, leading: 8, bottom: 11, trailing: 8)))
+                .padding(.vertical, -11)
+                .accessibilityLabel("暂停")
+                .accessibilityIdentifier("pauseDuel")
             }
             .frame(width: 64)
             VStack(alignment: .trailing, spacing: 5) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    // 名字一行放下、不换行（名字优先占位）；称号放不下就缩小，再不行省略
                     Text(c.foeTitle).font(.system(size: 11, weight: .bold)).foregroundStyle(Palette.slate)
-                    Text(c.foeName).font(Fonts.display(22))
+                        .lineLimit(1).minimumScaleFactor(0.75)
+                    Text(c.foeName).font(Fonts.display(22)).lineLimit(1).fixedSize().layoutPriority(1)
                 }
                 SkewBar(value: Double(c.foeHP) / Double(max(1, c.foeMaxHP)), color: Palette.life(c.foeLives), height: 12, skew: 0.25,
                         fromTrailing: true, track: c.foeLives > 1 && !c.knockdownHold ? Palette.life(c.foeLives - 1) : .white, anim: 0.6,
@@ -303,4 +315,15 @@ struct Star4: Shape {
 struct QiBarFrameKey: PreferenceKey {
     static let defaultValue: CGRect = .zero
     static func reduce(value: inout CGRect, nextValue: () -> CGRect) { let v = nextValue(); if v != .zero { value = v } }
+}
+
+/// 暂停图标：两条竖线。
+struct PauseGlyph: View {
+    var body: some View {
+        HStack(spacing: 4) {
+            Rectangle().fill(Palette.ink).frame(width: 4, height: 11)
+            Rectangle().fill(Palette.ink).frame(width: 4, height: 11)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
 }

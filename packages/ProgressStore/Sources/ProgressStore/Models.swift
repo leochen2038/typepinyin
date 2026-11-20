@@ -96,3 +96,30 @@ import SwiftData
 
     init(deviceId: String) { self.deviceId = deviceId }
 }
+
+/// 日历：这台设备一天的记录（LearningCore 的 DayLog 编码在 data 里）。
+@Model final class DeviceDay {
+    var deviceId: String = ""
+    var day: Int = 0
+    var data: Data?
+
+    init(deviceId: String, day: Int) {
+        self.deviceId = deviceId
+        self.day = day
+    }
+}
+
+/// 勋章：这台设备拿到的一枚（哪条台阶、第几级、哪天、那一刻）。两台设备取日期早的那份。
+@Model final class DeviceBadge {
+    var deviceId: String = ""
+    var track: String = ""
+    var step: Int = 0
+    var day: Int = 0
+    var memento: String = ""
+
+    init(deviceId: String, track: String, step: Int) {
+        self.deviceId = deviceId
+        self.track = track
+        self.step = step
+    }
+}

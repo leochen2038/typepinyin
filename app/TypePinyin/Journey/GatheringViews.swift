@@ -25,7 +25,7 @@ struct GatheringRoot: View {
         case .hall:
             GatheringHallView(j: j)
         case .duel(let k):
-            DuelScreen(c: j.duel, prepare: { j.startGatheringDuel(k) })
+            DuelScreen(c: j.duel, prepare: { j.startGatheringDuel(k) }, onQuit: { j.gatheringStage = .hall })
                 .id("gathering-\(k)-\(j.duelToken)")
         case .crowned:
             CrownedView(j: j)
@@ -67,7 +67,7 @@ struct GatheringHallView: View {
                         .padding(.horizontal, 10).padding(.vertical, 6)
                         .background(Color.white).overlay(Rectangle().stroke(Palette.ink, lineWidth: 2))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.popSmall)
                 .accessibilityIdentifier("backToMap")
                 Text("武林大会").font(Fonts.display(26))
                     .overlay(PanelGesture { j.showPanel = true })
@@ -211,9 +211,8 @@ struct FinaleView: View {
                         Text("发给家人看看").font(Fonts.display(22)).frame(maxWidth: .infinity).frame(height: 50)
                             .background(Palette.gold).foregroundStyle(Palette.ink)
                             .overlay(Rectangle().stroke(Palette.ink, lineWidth: 3))
-                            .compositingGroup().shadow(color: Palette.ink, radius: 0, x: 3, y: 3)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pop)
                     .accessibilityIdentifier("shareCard")
                 }
                 RegionCard.button("回江湖", primary: false) { j.screen = .map }

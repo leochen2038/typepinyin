@@ -63,6 +63,14 @@ final class MusicLayers {
         }
     }
 
+    /// 玩家点暂停：音乐压到没声（还在走，四层保持对齐）；继续时按当前层数淡回来。
+    func hold(_ on: Bool) {
+        guard active else { return }
+        for (i, p) in players.enumerated() {
+            p.setVolume(!on && i <= level ? master : 0, fadeDuration: on ? 0.25 : 0.5)
+        }
+    }
+
     /// 打完或离开比武：淡出后停下。
     func stop() {
         guard active else { return }
@@ -77,5 +85,59 @@ final class MusicLayers {
             guard let self, self.fadeToken == token else { return }
             self.players.forEach { $0.pause() }
         }
+    }
+}
+
+/// 比武以外的配乐（2026-11-18）：地图、岛上长卷、秘籍页、练习场放「江湖」背景音（Resources/Music/ambient_map.caf），
+/// 打碑文、奇遇、文章放静版（ambient_calm.caf：没有低音和木鱼，笛子更轻）。两首都约 1 分 40 秒、无缝循环，
+/// 两首由同一份乐谱生成（写成 MIDI，用开源音色库渲染）。
+/// 换场景时 1 秒交叉淡入淡出；进比武淡出（比武有自己的配乐）。音量比比武配乐还低，开关和比武配乐共用。
+@MainActor
+final class AmbientMusic {
+    enum Track: String { case map = "ambient_map", calm = "ambient_calm" }
+    private var players: [Track: AVAudioPlayer] = [:]
+    private(set) var current: Track?
+    private var token = 0
+    /// 各首的音量：静版更轻，打字时不抢。
+    static let volume: [Track: Float] = [.map: 0.14, .calm: 0.10]   // 2026-11-20 调小（原来 0.22、0.16）
+    var on = true {
+        didSet {
+            guard on != oldValue else { return }
+            if on, let t = current { start(t) } else { players.values.forEach { $0.pause() } }
+        }
+    }
+
+    private func player(_ t: Track) -> AVAudioPlayer? {
+        if let p = players[t] { return p }
+        guard let url = Bundle.main.url(forResource: t.rawValue, withExtension: "caf"),
+              let p = try? AVAudioPlayer(contentsOf: url) else { return nil }
+        p.numberOfLoops = -1
+        p.volume = 0
+        p.prepareToPlay()
+        players[t] = p
+        return p
+    }
+
+    /// 换到这一首（nil = 淡出停下）。同一首不打断。
+    func play(_ t: Track?) {
+        guard t != current else { return }
+        let old = current
+        current = t
+        token += 1
+        let my = token
+        if let old, let p = players[old] {
+            p.setVolume(0, fadeDuration: 1.0)
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(1.05))
+                if self.token == my, self.current != old { p.pause() }
+            }
+        }
+        if let t, on { start(t) }
+    }
+
+    private func start(_ t: Track) {
+        guard let p = player(t) else { return }
+        if !p.isPlaying { p.volume = 0; p.play() }
+        p.setVolume(Self.volume[t] ?? 0.3, fadeDuration: 1.0)
     }
 }

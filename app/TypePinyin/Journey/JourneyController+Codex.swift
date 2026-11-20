@@ -64,6 +64,13 @@ extension JourneyController {
         xpLevels ? BookXP.progress(progress.volumes[v]?.xp ?? 0) : cardProgress(of: v)
     }
 
+    /// 地图上点开岛的卡片里写秘籍的那一行：拿到了写「葫芦集秘籍 · 2 级」；没拿到写怎么拿。
+    func sheetBookLine(_ r: Region) -> String {
+        let name = bookName(r.volume)
+        if let st = progress.volumes[r.volume], st.obtained { return "\(name) · \(levelText(xpLevels ? BookXP.level(st.xp) : st.rank))" }
+        return obtainAtStele ? "打完碑文即可获得\(name)" : "打赢掌门即可获得\(name)"
+    }
+
     /// 这一卷在哪个地区、谁手里。
     func region(giving v: String) -> Region? { content.regions.first { $0.volume == v } }
 }

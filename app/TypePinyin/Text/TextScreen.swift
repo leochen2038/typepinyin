@@ -50,7 +50,7 @@ struct TextScreen: View {
                             .padding(.horizontal, 10).padding(.vertical, 6)
                             .background(Color.white).overlay(Rectangle().stroke(Palette.ink, lineWidth: 2))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.popSmall)
                     .padding(.leading, 16)
                 }
                 header
@@ -162,7 +162,7 @@ struct TextScreen: View {
                     Text(doneLabel ?? (onEncounterDone != nil ? "接着走" : "再来一次")).font(Fonts.display(20)).frame(maxWidth: .infinity).padding(.vertical, 10)
                         .background(Palette.gold).overlay(Rectangle().stroke(Palette.ink, lineWidth: 3))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.pop)
             }
             .padding(22)
             .background(Color.white)

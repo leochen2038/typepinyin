@@ -86,6 +86,10 @@ public struct Progress: Sendable, Equatable {
     public var speed: SpeedState?
     /// 练功房：打过的词（按文字）。
     public var practice: [String: PracticeWord] = [:]
+    /// 日历：每天各台设备的记录（按天）。
+    public var days: [Int: [DayLog]] = [:]
+    /// 勋章：「台阶:第几级」→ 那一枚（两台设备取日期早的）。
+    public var badges: [String: BadgeRecord] = [:]
     public init() {}
 }
 
@@ -97,6 +101,9 @@ public struct ProgressChange: Sendable {
     public var records: [SyllableRecord] = []
     public var speed: SpeedState?
     public var practice: [PracticeWord] = []
+    /// 这台设备的日历记录（整份替换那一天）。
+    public var days: [DayLog] = []
+    public var badges: [BadgeRecord] = []
     public init() {}
 }
 
@@ -111,7 +118,8 @@ public final class ProgressStore {
     let container: ModelContainer
     var context: ModelContext { container.mainContext }
 
-    static let schema = Schema([DeviceSyllable.self, DeviceVolume.self, DeviceRegion.self, DeviceJourney.self, DeviceSpeed.self, DevicePracticeWord.self])
+    static let schema = Schema([DeviceSyllable.self, DeviceVolume.self, DeviceRegion.self, DeviceJourney.self, DeviceSpeed.self, DevicePracticeWord.self,
+                                 DeviceDay.self, DeviceBadge.self])
     static let deviceKey = "progress.deviceId"
 
     /// - Parameters:
@@ -195,6 +203,18 @@ public final class ProgressStore {
             if let old = p.practice[w.text], (old.seen, old.lastSeen) >= (w.seen, w.lastSeen) { continue }   // 两台设备取打得多的那份
             p.practice[w.text] = w
         }
+        for row in (try? context.fetch(FetchDescriptor<DeviceDay>())) ?? [] {
+            guard let data = row.data, var log = try? JSONDecoder().decode(DayLog.self, from: data) else { continue }
+            log.deviceId = row.deviceId
+            log.day = row.day
+            p.days[row.day, default: []].append(log)
+        }
+        for row in (try? context.fetch(FetchDescriptor<DeviceBadge>())) ?? [] {
+            guard let t = BadgeTrack(rawValue: row.track) else { continue }
+            let b = BadgeRecord(track: t, step: row.step, day: row.day, memento: row.memento)
+            if let old = p.badges[b.key], old.day <= b.day { continue }        // 两台设备取日期早的那份
+            p.badges[b.key] = b
+        }
         let me = deviceId
         p.speed = (try? context.fetch(FetchDescriptor<DeviceSpeed>(predicate: #Predicate { $0.deviceId == me })))?.first
             .map { SpeedState(secondsPerLetter: $0.secondsPerLetter, startSeconds: $0.startSeconds, samples: $0.samples) }
@@ -258,6 +278,21 @@ public final class ProgressStore {
             row.lastSeen = w.lastSeen
             row.cleanDuels = w.cleanDuels
         }
+        for log in change.days {
+            let d = log.day
+            let row = try fetchOne(DeviceDay.self, #Predicate { $0.deviceId == dev && $0.day == d }) ?? insert(DeviceDay(deviceId: dev, day: d))
+            row.data = try? JSONEncoder().encode(log)
+        }
+        for b in change.badges {
+            let t = b.track.rawValue, st = b.step
+            if let row = try fetchOne(DeviceBadge.self, #Predicate { $0.deviceId == dev && $0.track == t && $0.step == st }) {
+                if b.day < row.day { row.day = b.day; row.memento = b.memento }
+            } else {
+                let row = insert(DeviceBadge(deviceId: dev, track: t, step: st))
+                row.day = b.day
+                row.memento = b.memento
+            }
+        }
         if let s = change.speed {
             let row = try fetchOne(DeviceSpeed.self, #Predicate { $0.deviceId == dev }) ?? insert(DeviceSpeed(deviceId: dev))
             row.secondsPerLetter = s.secondsPerLetter
@@ -277,6 +312,15 @@ public final class ProgressStore {
         try context.delete(model: DeviceJourney.self, where: #Predicate { $0.deviceId == me })
         try context.delete(model: DeviceSpeed.self, where: #Predicate { $0.deviceId == me })
         try context.delete(model: DevicePracticeWord.self, where: #Predicate { $0.deviceId == me })
+        try context.delete(model: DeviceDay.self, where: #Predicate { $0.deviceId == me })
+        try context.delete(model: DeviceBadge.self, where: #Predicate { $0.deviceId == me })
+        try context.save()
+    }
+
+    /// 调参「清空勋章」：删掉本设备拿到的勋章（日历记录不动）。
+    public func resetBadges() throws {
+        let me = deviceId
+        try context.delete(model: DeviceBadge.self, where: #Predicate { $0.deviceId == me })
         try context.save()
     }
 

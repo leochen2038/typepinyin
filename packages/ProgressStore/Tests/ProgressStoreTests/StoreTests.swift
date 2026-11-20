@@ -116,3 +116,49 @@ import Testing
         try store.save(ProgressChange())
     }
 }
+
+@MainActor
+@Suite struct CalendarStoreTests {
+    /// 日历：两台设备同一天各记一份，读出来两份都在；同一台再存一次是整份替换。
+    @Test func daysKeepOnePerDevice() throws {
+        let store = try ProgressStore(inMemory: true, deviceId: "A")
+        var a = DayLog(day: 300, deviceId: "A", device: "iPhone")
+        a.duels = 2
+        var ch = ProgressChange()
+        ch.days = [a]
+        try store.save(ch)
+        a.duels = 3
+        try store.save(ch.with(days: [a]))
+        var b = DayLog(day: 300, deviceId: "B", device: "Mac")
+        b.texts = 1
+        try store.save(ProgressChange().with(days: [b]), asDevice: "B")
+        let logs = store.load().days[300] ?? []
+        #expect(logs.count == 2)
+        #expect(DaySummary(logs).duels == 3)
+        #expect(DaySummary(logs).fights == 4)
+    }
+
+    /// 勋章：同一枚两台设备都拿到，取日期早的那份和它记下的那一刻。
+    @Test func badgesKeepEarliest() throws {
+        let store = try ProgressStore(inMemory: true, deviceId: "A")
+        var ch = ProgressChange()
+        ch.badges = [BadgeRecord(track: .cards, step: 2, day: 310, memento: "白菜")]
+        try store.save(ch)
+        var other = ProgressChange()
+        other.badges = [BadgeRecord(track: .cards, step: 2, day: 305, memento: "地图")]
+        try store.save(other, asDevice: "B")
+        let p = store.load()
+        #expect(p.badges["cards:2"]?.day == 305)
+        #expect(p.badges["cards:2"]?.memento == "地图")
+        try store.resetBadges()
+        #expect(store.load().badges["cards:2"]?.day == 305)       // B 的那份还在
+    }
+}
+
+extension ProgressChange {
+    func with(days: [DayLog]) -> ProgressChange {
+        var c = self
+        c.days = days
+        return c
+    }
+}

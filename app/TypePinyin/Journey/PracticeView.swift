@@ -15,7 +15,7 @@ struct PracticeView: View {
                         .padding(.horizontal, 10).padding(.vertical, 6)
                         .background(Color.white).overlay(Rectangle().stroke(Palette.ink, lineWidth: 2))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.popSmall)
                 .accessibilityIdentifier("backToMap")
                 Text("练习场").font(Fonts.display(26))
                     .overlay(PanelGesture { j.showPanel = true })
@@ -31,7 +31,7 @@ struct PracticeView: View {
             .padding(.horizontal, 16).padding(.top, 12)
             if j.practiceTab == 0 { words } else { passages }
         }
-        .background(Palette.mist)
+        .background(SkyPage())                                     // 和江湖地图、秘籍页同一个底
         .onAppear {
             guard j.practiceTab == 0, !j.practiceWords.isEmpty else { return }
             j.autoAdvance(after: 2) { jj in jj.startPracticeChallenge() }

@@ -8,8 +8,10 @@ public enum BookXP {
         1 + (clean ? 1 : 0) + (clean && perfect ? 1 : 0) + (new ? 2 : 0)
     }
 
-    /// 升到 2、3、4、5 级要的累计经验。一趟岛大约得 400：第一趟头几场到 2 级，走完时离 3 级不远，之后大约一趟一级，五趟上下满级。
-    public static let thresholds = [0, 100, 500, 1100, 2000]
+    /// 升到 2、3、4、5 级要的累计经验（2026-11-17 第二版）。一场大约 40–60：第一趟第四场左右到 2 级，第二趟中间 3 级，
+    /// 第三趟末 4 级，第五趟上下满级。第一版 100 / 500 / 1100 / 2000，真机上两场就到 2 级，太快。调参面板能改（旅程开局时设）。
+    public static let standard = [0, 200, 800, 1400, 2200]
+    nonisolated(unsafe) public static var thresholds = standard
     public static let maxLevel = 5
 
     /// 这么多经验是几级（1…5）。

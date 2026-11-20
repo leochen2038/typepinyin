@@ -49,6 +49,12 @@ public struct LearningTuning: Codable, Sendable, Equatable {
     public var masterDuels: Int = 4
     /// 秘籍怎么升级：1 = 打牌涨经验（默认，2026-11-17），0 = 原来按词卡算重数（一半音节有熟练的词卡升二重……）。
     public var bookLevels: Int = 1
+    /// 秘籍升到 2、3、4、5 级要的累计经验。
+    public var bookXP2: Int = 200
+    public var bookXP3: Int = 800
+    public var bookXP4: Int = 1400
+    public var bookXP5: Int = 2200
+    public var bookXPThresholds: [Int] { [0, bookXP2, max(bookXP2 + 1, bookXP3), max(bookXP3 + 1, bookXP4), max(bookXP4 + 1, bookXP5)] }
     /// 地区里挑词时，从没收过的词卡里挑的比例（其余出收过的）。
     public var newCardShare: Double = 0.7
     /// 新音节第一次碰到就打对、每个字母不超过这么多秒：算本来就会，不占新音节名额。
@@ -79,15 +85,22 @@ public struct LearningTuning: Codable, Sendable, Equatable {
     public var openingTargetSeconds: Double = 80
     public var openingMinHP: Int = 1
 
+    // 勋章（docs/calendar-badges.md 3.2、3.4）
+    /// 每条台阶各级要到的数（键是台阶：cards books levels fights days）；没写的用 BadgeRules 的默认。收集词卡写 0 表示「全部」。
+    public var badgeSteps: [String: [Int]] = [:]
+    /// 每条台阶银、金、朱红从第几级开始（从 0 数，三个数）；没写的用默认。
+    public var badgeCuts: [String: [Int]] = [:]
+
     public init() {}
 
     enum CodingKeys: String, CodingKey, CaseIterable {
         case firstFluentStart, fluentDays, fluentRecent, fluentStart, masterRecent, masterStart
         case replayOffsets, reviewDays, mixKnown, mixNew, mixReview, mixFiller, newPerDuel, newGap, newPerDay, newPickTop
         case afterMissKnown, successTarget, successWindow, recentWords
-        case fluentDuels, masterDuels, bookLevels, newCardShare, knownSecondsPerLetter, speedWeight
+        case fluentDuels, masterDuels, bookLevels, bookXP2, bookXP3, bookXP4, bookXP5, newCardShare, knownSecondsPerLetter, speedWeight
         case openingBattles, openingTargetSeconds, openingMinHP
         case earlyLengths, middleLengths, bossLengths
+        case badgeSteps, badgeCuts
     }
 
     /// 缺少的字段用默认值，旧的覆盖文件在加了新字段后仍然能读。
@@ -118,6 +131,10 @@ public struct LearningTuning: Codable, Sendable, Equatable {
         fluentDuels = try v(.fluentDuels, d.fluentDuels)
         masterDuels = try v(.masterDuels, d.masterDuels)
         bookLevels = try v(.bookLevels, d.bookLevels)
+        bookXP2 = try v(.bookXP2, d.bookXP2)
+        bookXP3 = try v(.bookXP3, d.bookXP3)
+        bookXP4 = try v(.bookXP4, d.bookXP4)
+        bookXP5 = try v(.bookXP5, d.bookXP5)
         newCardShare = try v(.newCardShare, d.newCardShare)
         knownSecondsPerLetter = try v(.knownSecondsPerLetter, d.knownSecondsPerLetter)
         speedWeight = try v(.speedWeight, d.speedWeight)
@@ -127,5 +144,7 @@ public struct LearningTuning: Codable, Sendable, Equatable {
         earlyLengths = try v(.earlyLengths, d.earlyLengths)
         middleLengths = try v(.middleLengths, d.middleLengths)
         bossLengths = try v(.bossLengths, d.bossLengths)
+        badgeSteps = try v(.badgeSteps, d.badgeSteps)
+        badgeCuts = try v(.badgeCuts, d.badgeCuts)
     }
 }

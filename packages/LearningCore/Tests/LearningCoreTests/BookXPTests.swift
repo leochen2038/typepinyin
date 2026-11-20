@@ -12,18 +12,24 @@ import Testing
     }
 
     @Test func levelsFollowThresholds() {
+        let t = BookXP.thresholds
         #expect(BookXP.level(0) == 1)
-        #expect(BookXP.level(99) == 1)
-        #expect(BookXP.level(100) == 2)
-        #expect(BookXP.level(499) == 2)
-        #expect(BookXP.level(1100) == 4)
+        #expect(BookXP.level(t[1] - 1) == 1)
+        #expect(BookXP.level(t[1]) == 2)
+        #expect(BookXP.level(t[2] - 1) == 2)
+        #expect(BookXP.level(t[3]) == 4)
         #expect(BookXP.level(99_999) == 5)
     }
 
     @Test func progressWithinLevel() {
+        let t = BookXP.thresholds
         #expect(BookXP.progress(0) == 0)
-        #expect(BookXP.progress(300) == 0.5)          // 2 级：100…500
-        #expect(BookXP.progress(5000) == 1)
+        #expect(BookXP.progress((t[1] + t[2]) / 2) == 0.5)
+        #expect(BookXP.progress(99_999) == 1)
+    }
+
+    @Test func defaultsMatchTuning() {
+        #expect(LearningTuning().bookXPThresholds == BookXP.standard)
     }
 
     /// 旧存档的等级补经验后，等级不掉。

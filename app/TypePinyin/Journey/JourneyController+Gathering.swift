@@ -71,7 +71,7 @@ extension JourneyController {
 
     /// 碑上的概况：十关的字都在，两场比武。
     var gatheringBrief: SteleBrief {
-        SteleBrief(focus: "十关的字", note: "十位掌门轮番上台，最后和妙笔书生比快",
+        SteleBrief(focus: "十关的字", note: "十位掌门依次上台，最后与妙笔书生比试速度",
                    facts: ["\(content.syllables.count) 个音节", "\(content.words.count) 张词卡", "2 场比武"])
     }
 

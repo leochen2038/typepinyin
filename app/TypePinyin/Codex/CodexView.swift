@@ -41,7 +41,7 @@ struct CodexView: View {
                         .padding(.horizontal, 10).padding(.vertical, 6)
                         .background(Color.white).overlay(Rectangle().stroke(Palette.ink, lineWidth: 2))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.popSmall)
                 Text("收获").font(Fonts.display(26))
                     .overlay(PanelGesture { j.showPanel = true })
                 Spacer()
@@ -386,6 +386,14 @@ struct BookCover: View {
         }
     }
 
+    /// 封面上的字用墨色（封面浅：葫芦集的明黄、半山镇和长风城的天蓝），其余用纸色。
+    static func inkOnCover(_ volume: String) -> Bool {
+        switch RankFx.theme(volume).kind {
+        case .plum, .drop, .tea, .spring, .peach: return false
+        default: return true
+        }
+    }
+
     var body: some View {
         GeometryReader { g in
             let w = g.size.width, h = g.size.height
@@ -419,15 +427,10 @@ struct BookCover: View {
                     .offset(x: w * 0.6, y: h * 0.08)
                 // 印
                 if !seal.isEmpty {
-                    if art != nil {                                // 彩色封面上红字看不清：实心红印、白字、米白边
-                        Text(seal)
-                            .font(.system(size: w * 0.17, weight: .black))
-                            .foregroundStyle(.white)
-                            .padding(w * 0.03)
-                            .background(Palette.red)
-                            .overlay(Rectangle().stroke(Color(hex: 0xFBF7EE), lineWidth: max(1, w * 0.02)))
+                    if art != nil {                                // 掌门印：和盖印演出同一个印（朱红方印、白字、磨损）
+                        SealMark(char: seal, size: w * 0.3)
                             .rotationEffect(.degrees(-8))
-                            .offset(x: w * 0.24, y: h * 0.72)
+                            .offset(x: w * 0.22, y: h * 0.66)
                     } else {
                         Text(seal)
                             .font(.system(size: w * 0.17, weight: .black))
@@ -549,32 +552,36 @@ struct CardChip: View {
     }
 }
 
-/// 收获页顶上的四个数：学会的音节、打出过的常用字、打字速度、词卡。只报收获，不写总数、不写还差多少。
+/// 收获页顶上的两个数（2026-11-20 去掉学会的音节、打出过的常用字）：每格写清楚是什么、怎么算的。只报收获，不写总数、不写还差多少。
 struct GainsPanel: View {
     let j: JourneyController
 
     var body: some View {
-        let levels = j.cardLevels
         let speed = TypingSpeedNote.last
-        let faster = (speed ?? 0) - (TypingSpeedNote.first ?? 0)
-        HStack(spacing: 6) {
-            tile(j.learnedSyllables.formatted(), "学会的音节", j.learnedToday > 0 ? "今天 +\(j.learnedToday)" : nil)
-            tile(j.typedCommonChars.formatted(), "打出过的常用字", nil)
-            tile(speed.map { String(format: "%.0f", $0) } ?? "–", "字/分", faster >= 1 ? String(format: "比第一场快 %.0f", faster) : nil)
-            tile(j.cards.count.formatted(), "张词卡", levels.fluent + levels.master > 0 ? "熟练 \(levels.fluent) 精通 \(levels.master)" : nil)
+        HStack(spacing: 8) {
+            tile("打字速度", speed.map { String(format: "%.0f", $0) } ?? "–", "字/分",
+                 note: speed == nil ? "完成首场比武后显示" : "最近一场比武的平均速度", accent: Palette.navy)
+            tile("收集的词卡", j.cards.count.formatted(), "张", note: "比武中打完的词，自动收录", accent: Palette.xp)
         }
         .accessibilityIdentifier("gains")
     }
 
-    private func tile(_ number: String, _ label: String, _ note: String?) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(number).font(Fonts.display(22)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.6)
-            Text(label).font(.system(size: 11, weight: .bold)).foregroundStyle(Palette.slate).lineLimit(1).minimumScaleFactor(0.7)
-            Text(note ?? " ").font(.system(size: 10, weight: .black)).foregroundStyle(Palette.red).lineLimit(1).minimumScaleFactor(0.7)
+    /// 一格：顶上一道颜色，粗黑边；不能点，所以不加投影（投影只给按钮）。从上往下：这是什么、数和单位、怎么算的。
+    private func tile(_ title: String, _ number: String, _ unit: String, note: String, accent: Color) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title).font(.system(size: 13, weight: .black)).foregroundStyle(Palette.ink)
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text(number).font(Fonts.display(26)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.6)
+                Text(unit).font(.system(size: 12, weight: .black))
+            }
+            Text(note).font(.system(size: 11, weight: .bold)).foregroundStyle(Palette.slate)
+                .lineLimit(2).fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.horizontal, 7).padding(.vertical, 6)
+        .padding(.horizontal, 9).padding(.top, 11).padding(.bottom, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white)
-        .overlay(Rectangle().stroke(Palette.ink, lineWidth: 1.5))
+        .background(alignment: .top) { ZStack(alignment: .top) { Color.white; Rectangle().fill(accent).frame(height: 5) } }
+        .overlay(Rectangle().stroke(Palette.ink, lineWidth: 2))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(title) \(number) \(unit)，\(note)")
     }
 }

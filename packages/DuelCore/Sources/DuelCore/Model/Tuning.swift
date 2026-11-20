@@ -94,6 +94,11 @@ public struct Tuning: Codable, Sendable, Equatable {
     /// 旅程里的群战一共几个人按岛的顺序往上加（2026-11-09）：掌门前那场 5 5 6 6 7 7 8 8 9 9，路上那场少两个；
     /// 关掉 = 原来（一律按 groupTotal）。路线里写了人数的（原来的课程第一关）照路线。
     public var groupByLevel: Bool = true
+    /// 日历、勋章（docs/calendar-badges.md）：各一个开关，关掉就是原来的收获页（打完一场照样记数据）。
+    public var calendarOn: Bool = true
+    public var badgesOn: Bool = true
+    /// 每天第一次回到地图，展开一张小卷轴：本周七格、勋章、下一枚（2026-11-20 试）。
+    public var dailyScrollOn: Bool = true
     public var heavyLetters: Int = 10
     public var mediumLetters: Int = 7
     public var replayOffsets: [Int] = [2, 5]
@@ -147,7 +152,7 @@ public struct Tuning: Codable, Sendable, Equatable {
         case heavyLetters, mediumLetters, replayOffsets, commitOnRelease
         case expectedKeyGrowPt, nearMissMaxPt, hapticsOnKey, comboGoldAt, comboRedAt, movesPerDuel, goldSecondsPerLetter, hintSeconds
         case cardsOnTable, pressureFactor, pressureBaseSeconds, pressureMinSeconds, grabStyle, handZones, slashMinGap, grabMode, qiBar, moveDots, rankFx, rankFxTheme, finisherShare, perfectQi, qiMultiplier, qiByLetters, anticipation, finisherFreeze, groupFight, groupFinisherStyle, groupSize, groupTotal, textMode, textStyle, textCharHit, artStyle, figureStyle
-        case foeLives, finisherTakesLife, lifeSpeedup, lifeDownSeconds, comboAura, finisherFx, openingStyle, curriculum, groupByLevel
+        case foeLives, finisherTakesLife, lifeSpeedup, lifeDownSeconds, comboAura, finisherFx, openingStyle, curriculum, groupByLevel, calendarOn, badgesOn, dailyScrollOn
         case bossPressure, bossPushBack, bossCycleCards, bossHit
         case learning
     }
@@ -233,6 +238,9 @@ public struct Tuning: Codable, Sendable, Equatable {
         figureStyle = try v(.figureStyle, d.figureStyle)
         comboAura = try v(.comboAura, d.comboAura)
         groupByLevel = try v(.groupByLevel, d.groupByLevel)
+        calendarOn = try v(.calendarOn, d.calendarOn)
+        badgesOn = try v(.badgesOn, d.badgesOn)
+        dailyScrollOn = try v(.dailyScrollOn, d.dailyScrollOn)
         finisherFx = try v(.finisherFx, d.finisherFx)
         handZones = try v(.handZones, d.handZones)
         slashMinGap = try v(.slashMinGap, d.slashMinGap)

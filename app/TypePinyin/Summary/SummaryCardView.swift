@@ -11,6 +11,8 @@ struct SummaryCardView: View {
     var books: [DuelController.SummaryBook] = []
     /// 秘籍升级那一下（响音效、震动）。
     var onLevelUp: () -> Void = {}
+    /// 秘籍经验条涨的时候一声一声（第 i 声）。
+    var onTick: (Int) -> Void = { _ in }
     /// 旅程的按钮（空 = 「再来一场」）。
     var actions: [DuelController.SummaryAction] = []
     let onAgain: () -> Void
@@ -44,7 +46,7 @@ struct SummaryCardView: View {
                 Rectangle().fill(Palette.mist2).frame(height: 2)
                 VStack(alignment: .leading, spacing: 12) {
                     if !s.won { Text("秘籍照样涨了").font(.system(size: 14, weight: .black)).foregroundStyle(Palette.slate) }
-                    ForEach(books) { b in BookGainRow(book: b, onLevelUp: onLevelUp) }
+                    ForEach(Array(books.enumerated()), id: \.element.id) { i, b in BookGainRow(book: b, order: i, onLevelUp: onLevelUp, onTick: onTick) }
                 }
             }
             if actions.isEmpty {
@@ -69,9 +71,8 @@ struct SummaryCardView: View {
             Text(label).font(Fonts.display(24)).frame(maxWidth: .infinity).frame(height: 52)
                 .background(primary ? Palette.gold : Color.white).foregroundStyle(Palette.ink)
                 .overlay(Rectangle().stroke(Palette.ink, lineWidth: 3))
-                .compositingGroup().shadow(color: Palette.ink, radius: 0, x: 3, y: 3)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pop)
     }
 
     private var gainLines: [String] {
@@ -104,79 +105,136 @@ struct SummaryCardView: View {
     }
 }
 
-/// 结算页的一本秘籍：小封面、名字、等级、「+41」；经验条上红色是原来的、金色是这一场涨的。
-/// 收获那几行的数字跑完（约 0.9 秒）再开始涨。正好升级的那本分三步演：
-/// ① 条从原来的位置涨满；② 升级：响升级音效、重震，「升到 N 级」盖上去，牌子闪一下，按新等级爆一次主题效果；③ 条清零，长到新的进度。
+/// 结算页的一本秘籍：小封面、名字、等级、「+41」；经验条上青绿是原来的、金色是这一场涨的。
+/// 收获那几行的数字跑完（约 0.9 秒）再开始涨，几本秘籍错开 0.35 秒。涨的手感：
+/// 金色先快后慢冲上去（0.55 秒），条头一个白亮点、甩出金色小方块；一路「嗒嗒嗒」音调一个比一个高、配轻震；
+/// 「+41」跟着条一起跑；到位那一下条竖着弹一下、闪白，最高一声。青绿晚 0.18 秒追上去。
+/// 正好升级的那本：① 冲满；② 升级：响升级音效、重震，等级牌子换成新等级，按新等级爆一次主题效果（行不放大）；③ 条清零，再冲到新的进度。
 struct BookGainRow: View {
     let book: DuelController.SummaryBook
+    /// 第几本（错开出场）。
+    var order = 0
     /// 升级那一下（响音效、震动），旅程给。
     var onLevelUp: () -> Void = {}
-    /// 条上金色走到哪（0…1）。
-    @State private var fill: Double
-    /// 红色（原来的）走到哪：升级后清零。
-    @State private var base: Double
+    /// 涨的时候一声一声（第 i 声，音调递增）和轻震，旅程给。
+    var onTick: (Int) -> Void = { _ in }
+    @State private var t0: Double?
+    /// 响声音、升级的那串定时：结算页关掉（进下一场）时取消，不然下一场开头还会听到嗒嗒声。
+    @State private var job: Task<Void, Never>?
     @State private var up = false
-    @State private var flash = 0.0
     @State private var burstAt = Date.distantFuture.timeIntervalSinceReferenceDate
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     static let start = 0.9
 
-    init(book: DuelController.SummaryBook, onLevelUp: @escaping () -> Void = {}) {
-        self.book = book
-        self.onLevelUp = onLevelUp
-        _fill = State(initialValue: book.from)
-        _base = State(initialValue: book.from)
+    // 时间轴（秒，从这本开始涨算）
+    static let rush = 0.55, lag = 0.18, chase = 0.5, pop = 0.28
+    /// 升级：冲满之后多久清零再涨。
+    static let hold = 0.45
+    private var lead: Double { Self.start + Double(order) * 0.35 }
+    /// 第二段（升级后）从几时开始。
+    private var phase2: Double { Self.rush + Self.hold }
+    private var total: Double { (book.leveledUp ? phase2 : 0) + Self.rush + Self.lag + Self.chase + Self.pop + 0.2 }
+
+    /// 睡到某个时刻（timeIntervalSinceReferenceDate）。
+    private static func sleep(until at: Double) async {
+        let d = at - Date().timeIntervalSinceReferenceDate
+        if d > 0 { try? await Task.sleep(for: .seconds(d)) }
+    }
+
+    private static func ease(_ x: Double) -> Double { let c = min(1, max(0, x)); return 1 - pow(1 - c, 3) }
+
+    /// t 时刻：金色、青绿、跑过的经验（0…1）、到位弹一下的强度（0…1）、条头位置是否在冲。
+    private func state(_ t: Double) -> (gold: Double, xp: Double, done: Double, pop: Double, rushing: Bool) {
+        func seg(_ t: Double, from: Double, to: Double) -> (Double, Double, Double, Bool) {
+            let g = from + (to - from) * Self.ease(t / Self.rush)
+            let x = from + (to - from) * Self.ease((t - Self.lag) / Self.chase)
+            let pp = t >= Self.rush ? max(0, 1 - (t - Self.rush) / Self.pop) : 0
+            return (g, x, pp, t > 0 && t < Self.rush)
+        }
+        guard book.leveledUp else {
+            let (g, x, pp, r) = seg(t, from: book.from, to: book.to)
+            return (g, x, Self.ease(t / Self.rush), pp, r)
+        }
+        let a = 1 - book.from, sum = max(0.001, a + book.to)
+        if t < phase2 {
+            let (g, x, pp, r) = seg(t, from: book.from, to: 1)
+            return (g, x, Self.ease(t / Self.rush) * a / sum, pp, r)
+        }
+        let (g, x, pp, r) = seg(t - phase2, from: 0, to: book.to)
+        return (g, x, (a + Self.ease((t - phase2) / Self.rush) * book.to) / sum, pp, r)
     }
 
     var body: some View {
-        Group { if book.leveledUp { levelUp } else { plain } }
-            .onAppear(perform: run)
+        TimelineView(.animation(paused: t0 == nil || Date().timeIntervalSinceReferenceDate - (t0 ?? 0) > total + 0.1)) { tl in
+            let t = reduceMotion ? 99 : t0.map { tl.date.timeIntervalSinceReferenceDate - $0 } ?? -1
+            row(state(t), t: t)
+        }
+        .onAppear(perform: run)
+        .onDisappear { job?.cancel(); job = nil }
     }
 
     private func run() {
         guard !reduceMotion else {
             up = book.leveledUp
-            base = book.leveledUp ? 0 : book.from
-            fill = book.to
             if book.leveledUp { onLevelUp() }
             return
         }
-        guard book.leveledUp else {
-            withAnimation(.easeOut(duration: 0.7).delay(Self.start)) { fill = book.to }
-            return
-        }
-        Task { @MainActor in
-            try? await Task.sleep(for: .seconds(Self.start))
-            withAnimation(.easeIn(duration: 0.55)) { fill = 1 }                 // ① 涨满
-            try? await Task.sleep(for: .seconds(0.6))
+        let begin = Date().timeIntervalSinceReferenceDate + lead
+        t0 = begin
+        job = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(lead))
+            await ticks(span: book.leveledUp ? 1 - book.from : book.to - book.from, from: 0)
+            guard book.leveledUp else { return }
+            await Self.sleep(until: begin + Self.rush)
+            guard !Task.isCancelled else { return }
             onLevelUp()                                                          // ② 升级
             burstAt = Date().timeIntervalSinceReferenceDate
-            flash = 0.9
-            withAnimation(.easeOut(duration: 0.45)) { flash = 0 }
             withAnimation(.spring(duration: 0.35, bounce: 0.55)) { up = true }
-            try? await Task.sleep(for: .seconds(0.35))
-            var t = Transaction()
-            t.disablesAnimations = true
-            withTransaction(t) { base = 0; fill = 0 }                           // ③ 清零，长到新进度
-            withAnimation(.easeOut(duration: 0.6)) { fill = book.to }
+            await Self.sleep(until: begin + phase2)
+            await ticks(span: book.to, from: 0)                                  // ③ 清零再冲
         }
     }
 
-    private var plain: some View {
+    /// 冲的这段按条走过的格数响几声（3～7 声），声音落在条正好走到那一格的时候；到位再响最高一声。
+    private func ticks(span: Double, from: Int) async {
+        let n = max(3, min(7, Int((span * 10).rounded())))
+        let start = Date().timeIntervalSinceReferenceDate
+        for k in 1...n {
+            let p = 1 - pow(1 - Double(k) / Double(n + 1), 1.0 / 3)          // 反解先快后慢：走到第 k 格的时刻
+            await Self.sleep(until: start + p * Self.rush)
+            guard !Task.isCancelled else { return }
+            onTick(from + k - 1)
+        }
+        await Self.sleep(until: start + Self.rush)
+        guard !Task.isCancelled else { return }
+        onTick(7)
+    }
+
+    private func row(_ s: (gold: Double, xp: Double, done: Double, pop: Double, rushing: Bool), t: Double) -> some View {
         HStack(spacing: 10) {
             BookCover(title: "", seal: "", sealColor: .clear, dim: false, volume: book.id).frame(width: 28, height: 38)
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
                     Text(book.name).font(.system(size: 16, weight: .black))
-                    badge(book.level)
+                    badge(book.leveledUp && !up ? book.level - 1 : book.level)
+                        .id(up)
+                        .transition(.scale(scale: 1.6).combined(with: .opacity))
                     Spacer()
-                    Text("+\(book.gain)").font(Fonts.display(24)).foregroundStyle(Palette.red)
+                    // 宽度按最终值留好，右对齐，跑的时候不左右晃；到位跟着条弹一下
+                    Text("+\(book.gain)").font(Fonts.display(24)).hidden()
+                        .overlay(alignment: .trailing) {
+                            Text("+\(Int((Double(book.gain) * s.done).rounded()))").font(Fonts.display(24))
+                                .foregroundStyle(Palette.red).fixedSize()
+                        }
+                        .scaleEffect(1 + 0.25 * s.pop, anchor: .trailing)
                 }
-                bar
+                bar(s, t: t)
             }
         }
+        .overlay { if book.leveledUp && !reduceMotion { burst } }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(book.name)，\(book.level) 级，经验加 \(book.gain)")
+        .accessibilityLabel(book.leveledUp ? "\(book.name)升到 \(book.level) 级，经验加 \(book.gain)"
+                                           : "\(book.name)，\(book.level) 级，经验加 \(book.gain)")
     }
 
     private func badge(_ level: Int) -> some View {
@@ -184,49 +242,15 @@ struct BookGainRow: View {
             .padding(.horizontal, 6).padding(.vertical, 1).background(Palette.red)
     }
 
-    private var levelUp: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 12) {
-                BookCover(title: "", seal: "", sealColor: .clear, dim: false, volume: book.id).frame(width: 52, height: 70)
-                    .scaleEffect(up ? 1 : 0.92)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(book.name).font(.system(size: 15, weight: .black))
-                    ZStack(alignment: .leading) {
-                        Text("\(book.level - 1) 级").font(Fonts.display(34)).foregroundStyle(Palette.ink)
-                            .opacity(up ? 0 : 1)
-                        Text("升到 \(book.level) 级").font(Fonts.display(34)).foregroundStyle(Palette.red)
-                            .scaleEffect(up ? 1 : 2.2, anchor: .leading)
-                            .opacity(up ? 1 : 0)
-                    }
-                    Text(book.note.isEmpty ? " " : book.note).font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.slate)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .opacity(up ? 1 : 0)
-                }
-            }
-            HStack(spacing: 8) {
-                bar
-                Text("+\(book.gain)").font(Fonts.display(24)).foregroundStyle(Palette.red)
-            }
-        }
-        .padding(12)
-        .background(Color(hex: up ? 0xFFF6D6 : 0xFFFFFF))
-        .overlay(Rectangle().fill(Color.white).opacity(flash).allowsHitTesting(false))
-        .overlay(Rectangle().stroke(Palette.ink, lineWidth: 2))
-        .scaleEffect(up ? 1 : 0.98)
-        .overlay { if !reduceMotion { burst } }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(book.name)升到 \(book.level) 级")
-    }
-
-    /// 按新等级爆一次主题效果：从封面和牌子上几处一起爆（和比武里打中时、秘籍页试看是同一个画法）。
+    /// 按新等级爆一次主题效果：从封面、等级牌子和条上几处一起爆（和比武里打中时、秘籍页试看是同一个画法）。
     private var burst: some View {
         TimelineView(.animation(paused: Date().timeIntervalSinceReferenceDate - burstAt > 2)) { tl in
             Canvas { ctx, size in
                 let t = tl.date.timeIntervalSinceReferenceDate - burstAt
                 guard t >= 0, t < 1.8 else { return }
                 let pad = 140.0, w = size.width - pad * 2, h = size.height - pad * 2
-                let spots = [CGPoint(x: pad + 38, y: pad + 47), CGPoint(x: pad + w * 0.45, y: pad + h * 0.3),
-                             CGPoint(x: pad + w * 0.75, y: pad + h * 0.35), CGPoint(x: pad + w * 0.6, y: pad + h * 0.8)]
+                let spots = [CGPoint(x: pad + 14, y: pad + h * 0.5), CGPoint(x: pad + w * 0.35, y: pad + h * 0.25),
+                             CGPoint(x: pad + w * 0.6, y: pad + h * 0.75), CGPoint(x: pad + w * 0.9, y: pad + h * 0.3)]
                 for (k, p) in spots.enumerated() {
                     RankFx.draw(ctx, at: p, seed: 7 + k * 13, t: t - Double(k) * 0.06, volume: book.id, rank: book.level, base: 5000)
                 }
@@ -238,16 +262,61 @@ struct BookGainRow: View {
         .allowsHitTesting(false)
     }
 
-    private var bar: some View {
+    /// 经验条：底、金色、青绿；冲的时候条头一个白亮点、身后甩金色小方块；到位条竖着弹一下、闪白。
+    private func bar(_ s: (gold: Double, xp: Double, done: Double, pop: Double, rushing: Bool), t: Double) -> some View {
         GeometryReader { g in
+            let w = g.size.width
             ZStack(alignment: .leading) {
                 Rectangle().fill(Palette.mist2)
-                Rectangle().fill(Palette.gold).frame(width: g.size.width * fill)
-                Rectangle().fill(Palette.red).frame(width: g.size.width * base)
+                Rectangle().fill(Palette.gold).frame(width: w * s.gold)
+                Rectangle().fill(Palette.xp).frame(width: w * min(s.xp, s.gold))
+                if s.rushing {
+                    Rectangle().fill(Color.white).frame(width: 6).offset(x: max(0, w * s.gold - 6))
+                }
+                Rectangle().fill(Color.white).opacity(0.85 * s.pop)
             }
             .overlay(Rectangle().stroke(Palette.ink, lineWidth: 2))
+            .scaleEffect(x: 1, y: 1 + 0.6 * s.pop)
+            .overlay(alignment: .leading) {
+                if !reduceMotion { sparks(width: w, t: t).allowsHitTesting(false) }
+            }
         }
         .frame(height: 10)
+    }
+
+    /// 条头甩出的金色小方块：每块在条头经过时生出来，往后上方飞、落下、变小消失（0.4 秒）。
+    private func sparks(width w: Double, t: Double) -> some View {
+        Canvas { ctx, size in
+            let midY = size.height / 2
+            func one(_ i: Int, born: Double, x: Double) {
+                let age = t - born
+                guard age >= 0, age < 0.4 else { return }
+                var r = UInt64(i &* 2654435761 &+ 97)
+                func rnd() -> Double { r = r &* 6364136223846793005 &+ 1442695040888963407; return Double(r >> 33) / Double(1 << 31) }
+                let vx = -40 - rnd() * 90, vy = -60 - rnd() * 120
+                let px = x + vx * age, py = midY + vy * age + 420 * age * age
+                let side = (3 + rnd() * 3) * (1 - age / 0.4)
+                let color = rnd() < 0.3 ? Color.white : Palette.gold
+                ctx.fill(Path(CGRect(x: px - side / 2, y: py - side / 2, width: side, height: side)), with: .color(color))
+                ctx.stroke(Path(CGRect(x: px - side / 2, y: py - side / 2, width: side, height: side)), with: .color(Palette.ink), lineWidth: 1)
+            }
+            let segs: [(start: Double, from: Double, to: Double)] = book.leveledUp
+                ? [(0, book.from, 1), (phase2, 0, book.to)] : [(0, book.from, book.to)]
+            for (si, sg) in segs.enumerated() {
+                let n = 16
+                for k in 0..<n {
+                    let born = sg.start + Self.rush * Double(k) / Double(n) * 0.9
+                    let x = 20 + (sg.from + (sg.to - sg.from) * Self.ease((born - sg.start) / Self.rush)) * w
+                    one(si * 100 + k, born: born, x: x)
+                }
+                // 到位那一下往四周炸一小圈
+                for k in 0..<8 {
+                    one(si * 100 + 50 + k, born: sg.start + Self.rush, x: 20 + sg.to * w)
+                }
+            }
+        }
+        .frame(width: w + 40, height: 60)
+        .offset(x: -20)
     }
 }
 

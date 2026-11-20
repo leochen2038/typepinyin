@@ -76,6 +76,20 @@ final class JourneyController {
         var gain: Int { after - before }
         var leveledUp: Bool { BookXP.level(after) > BookXP.level(before) }
     }
+    /// 这一场新收的词卡（按收到的先后；收集词卡勋章记「第 N 张是哪个词」用）。
+    @ObservationIgnored var duelNewOrder: [String] = []
+    /// 旧存档补发的勋章：回到地图时出一张卡片（只一次）。
+    var backfillCard: [BadgeRecord]?
+    /// 每天第一次回到地图展开的小卷轴（本周七格、勋章、下一枚）。
+    var showDailyScroll = false
+    /// 这一次卷轴要演的（展开时定下来）。
+    var scrollShow: ScrollShow?
+    /// 卷轴收起、飞进「收获」按钮时加一：按钮弹一下、扩一圈波纹。
+    var harvestPing = 0
+    /// 地图「收获」按钮在屏幕上的位置（卷轴收起后飞过去）。
+    @ObservationIgnored var harvestButtonFrame: CGRect?
+    /// 进收获页时直接打开哪一页（「calendar」「badges」），补发卡片的「去看看」用。
+    @ObservationIgnored var openHarvestPage: String?
     /// 刚升重（演出用）。
     var rankUp: RankUp?
     struct RankUp: Equatable { var volume: String; var rank: Int }
@@ -133,6 +147,7 @@ final class JourneyController {
             try? store?.resetAll()
             progress = store?.load() ?? Progress()
             DayClock.resetOffset()
+            ScrollReveal.resetAll()
         }
         let args = ProcessInfo.processInfo.arguments
         if let k = args.firstIndex(of: "-obtain"), k + 1 < args.count {      // 开发用：-obtain all / -obtain liangzi-shang,lv
@@ -140,7 +155,21 @@ final class JourneyController {
             debugObtain(list)
         }
         learner.records = progress.records
+        BookXP.thresholds = duel.tuning.learning.bookXPThresholds
         migrateBooks()
+        if args.contains("-sampleCalendar") { seedSampleCalendar() }   // 开发用：写进样例数据看日历、勋章
+        backfillBadges()                                        // 旧存档：按已有的词卡、掌门印、秘籍等级补发勋章（只一次）
+        startScrollReveal()                                     // 第一次用地图卷轴：已有的印和勋章算演过
+        if let k = args.firstIndex(of: "-scrollPendingDays"), k + 1 < args.count, let n = Int(args[k + 1]) {   // 开发用：最近 n 天的印和勋章算没演过
+            ScrollReveal.clearFirst()
+            ScrollReveal.days = ScrollReveal.days.filter { $0 <= today - n }
+            ScrollReveal.badges = Set(progress.badges.values.filter { $0.day <= today - n }.map(\.key))
+        }
+        duel.cardLabel = { [weak self] w in                     // 词牌下面写这张牌归哪本秘籍、几级
+            guard let self, self.xpLevels else { return nil }
+            let v = self.content.owner(of: JourneyCardSource.content(w).syllables)
+            return self.bookName(v) + " · " + self.levelText(max(1, self.rank(of: v)))
+        }
         sessionStartChars = typedCommonChars
         screen = startScreen()
         if case .region(let id) = screen { enterRegion(id) }
@@ -220,15 +249,41 @@ final class JourneyController {
         for r in change.records { progress.records[r.spelling] = r }
         if let s = change.speed { progress.speed = s }
         for w in change.practice { progress.practice[w.text] = w }
+        for d in change.days {
+            var logs = progress.days[d.day] ?? []
+            logs.removeAll { $0.deviceId == d.deviceId }
+            logs.append(d)
+            progress.days[d.day] = logs
+        }
+        for b in change.badges where (progress.badges[b.key]?.day ?? .max) > b.day { progress.badges[b.key] = b }
+    }
+
+    /// 这台设备的编号（日历按设备分开记）。
+    var deviceId: String { store?.deviceId ?? "local" }
+
+    /// 调参「清空勋章」：删掉这台设备的勋章、看过的记号和补发记号，下次结算（或「重新补发」）再按现有的进度发。
+    func resetBadges() {
+        try? store?.resetBadges()
+        progress = store?.load() ?? progress
+        var j = progress.journey
+        j.tipsSeen = j.tipsSeen.filter { !$0.hasPrefix("badge:") && $0 != Self.backfillKey }
+        ScrollReveal.badges = []
+        var ch = ProgressChange()
+        ch.journey = j
+        save(ch)
     }
 
     /// 调参「清空进度」：清掉本设备的全部记录，回到第一次打开。
     func resetProgress() {
         duel.music.stop()
-        try? store?.resetAll()
+        try? store?.resetAll()                                 // 连日历（每天的记录）和勋章一起删
         progress = store?.load() ?? Progress()
         learner = Learner(tuning: duel.tuning.learning)
         DayClock.resetOffset()
+        ScrollReveal.resetAll()                                // 卷轴演过什么也清掉，重新拿到的照样落下来
+        backfillCard = nil
+        showDailyScroll = false
+        scrollShow = nil
         route = nil
         openingLineShown = false
         screen = startScreen()
@@ -295,10 +350,12 @@ extension JourneyController {
         practicePending = [:]
         duelClean = [:]
         duelXP = [:]
+        duelNewOrder = []
         let onCard: (Word, Bool, Double) -> Void = { [weak self] word, clean, spl in
             guard let self, !word.syllables.isEmpty else { return }
             // 秘籍经验：这张牌归哪一关，就给哪本秘籍；打干净、打得快多给，第一次收到这张词卡再多给
             let isNew = self.practicePending[word.text] == nil && (self.progress.practice[word.text]?.syllables.isEmpty ?? true)
+            if isNew { self.duelNewOrder.append(word.text) }
             let perfect = spl <= self.duel.tuning.goldSecondsPerLetter
             self.duelXP[self.content.owner(of: word.syllables), default: 0] += BookXP.gain(clean: clean, perfect: perfect, new: isNew)
             self.duelClean[word.text] = (self.duelClean[word.text] ?? true) && clean
@@ -334,6 +391,9 @@ extension JourneyController {
             onEvent: { [weak self] e in self?.handleTipEvent(e) },
             onFinish: { [weak self] summary, attempts, spl in
                 guard let self else { return }
+                let before = self.settleBefore()
+                let note = self.fightNote(place: self.settlePlace, foe: foe, won: summary.won,
+                                          group: group ? (groupTotal ?? self.duel.tuning.groupTotal) : nil)
                 let change = self.learner.record(attempts)
                 self.sessionLearned.formUnion(change.newlyMet.filter { self.content.volume(of: $0) != "base" })
                 var j = self.progress.journey
@@ -356,6 +416,11 @@ extension JourneyController {
                 }
                 self.save(ch)
                 done(summary, change)
+                // 日历、勋章：结算（连掌门盖印、当选盟主）都存好了再记；盖印、落勋章在回到地图的卷轴上演
+                self.logSettle(before, SettleInfo(
+                    text: false,
+                    newCards: self.duelNewOrder, books: self.lastBookGains, cpm: summary.charsPerMinute,
+                    region: backdrop?.region, note: note))
             })
     }
 
@@ -575,16 +640,6 @@ extension JourneyController {
                           shortFirstLevel: !oneLevelPerWord)
     }
 
-    /// 地图卡片的「从头开始」：丢掉这一趟的路线和走到的站，重新排一条，从第一站走（通关状态、秘籍、词卡不动）。
-    func restartRegion(_ id: String) {
-        if let s = progress.regions[id] {
-            var ch = ProgressChange()
-            ch.regions[id] = RegionState(phase: s.phase, stationIndex: 0, route: nil)
-            save(ch)
-        }
-        enterRegion(id)
-    }
-
     /// 调试（调参面板）：直接跳到这一趟长卷的第 i 站，站前照常问挑战。进度会存下来。
     func debugJump(to i: Int) {
         guard let id = currentRegion?.id, let r = route, r.stations.indices.contains(i) else { return }
@@ -661,6 +716,7 @@ extension JourneyController {
 
     /// 打完一篇（奇遇或练习场的文章）：每个音节记一次，打出的字也算进常用字。
     func recordText(_ t: TextController) {
+        let before = settleBefore()
         var attempts: [Attempt] = []
         let now = Date().timeIntervalSinceReferenceDate
         for (k, s) in t.sentences.enumerated() {
@@ -677,6 +733,15 @@ extension JourneyController {
         for s in t.sentences { jj.typedChars.formUnion(s.chars.map(String.init)) }     // 奇遇里打出的字也算
         ch.journey = jj
         save(ch)
+        // 日历、勋章：一篇文字算一场
+        let id = t.given?.id ?? ""
+        let title = t.given?.title ?? ""
+        let regionId = currentRegion?.id ?? encounter(id)?.regions.first
+        let place = settlePlace
+        let note = id.hasPrefix("stele-") ? "打完\(title)" : place.isEmpty ? "打完《\(title)》" : "\(place)，打完《\(title)》"
+        logSettle(before, SettleInfo(
+            text: true,
+            newCards: [], books: [], cpm: t.cpm, region: regionId, note: note))
     }
 
     /// 奇遇的「接着走」。
@@ -768,6 +833,7 @@ extension JourneyController {
     /// 这一场的经验结到秘籍上：只涨不扣，够了就升级。返回要存的卷。
     func settleBooks() -> [String: VolumeState] {
         defer { duelXP = [:] }
+        BookXP.thresholds = duel.tuning.learning.bookXPThresholds   // 调参面板改了门槛，下一场结算就按新的
         guard xpLevels else { lastBookGains = []; return [:] }
         var out: [String: VolumeState] = [:]
         var gains: [BookGain] = []
@@ -888,10 +954,10 @@ extension JourneyController {
             && !ProcessInfo.processInfo.arguments.contains("-noStele")
     }
 
-    /// 碑文里这次要亮键的音节：葫芦集全程亮（返回 nil，整句都亮）；别的岛只亮还没碰到过的音节。
+    /// 碑文里这次要亮键的音节：只有葫芦集（整个游戏第一次打碑文）全程亮（返回 nil，整句都亮）；
+    /// 别的岛不亮（2026-11-18：原来亮还没碰到过的音节，碑文多是这一关的新音节，几乎整句都亮，像又教了一遍）。
     func steleGuide(_ r: Region) -> Set<String>? {
-        guard r.id != "huluji", let st = r.stele else { return nil }
-        return Set(st.syllables.filter { (learner.records[$0]?.proficiency ?? .locked) < .met })
+        r.id == "huluji" ? nil : []
     }
 
     /// 碑上写的这一关的概况：练什么、几个音节、几张词卡、一路几场比武。

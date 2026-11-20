@@ -21,6 +21,10 @@ struct WorldMapView: View {
 
     func phase(_ id: String) -> RegionPhase { j.progress.regions[id]?.phase ?? .untouched }
     @State private var lockedNote: String?
+    // Motion Prompt #071 · MIT License (c) 2026 Shohei Ohtaki · https://showheyohtaki.github.io/motion-prompt/#071
+    /// 卷轴飞进来时按钮弹一下（Motion Prompt #071：1.3 倍 0.3 秒回到原大）、扩一圈波纹（0.5 秒扩 16、淡掉）。
+    @State private var pingPop: CGFloat = 0
+    @State private var pingRing: CGFloat = 1
 
     var body: some View {
         GeometryReader { g in
@@ -67,9 +71,10 @@ struct WorldMapView: View {
                 // 卡片一直在，只上下移：原来每次插进、移走整张卡片，加上整张地图跟着动画，出现和消失都卡
                 if let id = sheetId, let r = j.content.region(id) {
                     RegionSheet(region: r, phase: phase(id), stationLine: stationLine(id),
+                                bookLine: j.sheetBookLine(r), syllables: j.content.syllables(in: r.volume).count,
+                                firstRegion: j.content.level(of: r.volume) == 0,
                                 cards: j.cardCount(in: r.volume), total: j.cardTotal(in: r.volume),
-                                onGo: { closeSheet(); j.inkTransition { j.enterRegion(id) } }, onClose: { closeSheet() },
-                                onRestart: { closeSheet(); j.inkTransition { j.restartRegion(id) } })
+                                onGo: { closeSheet(); j.inkTransition { j.enterRegion(id) } }, onClose: { closeSheet() })
                         .frame(maxHeight: .infinity, alignment: .bottom)   // 和请帖同时在时也贴底，不跑到屏幕中间
                         .offset(y: sheetUp ? 0 : g.size.height)
                         .allowsHitTesting(sheetUp)
@@ -82,9 +87,38 @@ struct WorldMapView: View {
                         .transition(.opacity)
                 }
             }
+            .overlay {
+                if let awards = j.backfillCard, !j.showInvitation {   // 旧存档补发的勋章：上线后第一次回到地图，只出一次
+                    BackfillCard(j: j, awards: awards,
+                                 onLook: { j.backfillCard = nil; j.openHarvestPage = "badges"; j.screen = .codex },
+                                 onClose: { withAnimation(.easeIn(duration: 0.2)) { j.backfillCard = nil } })
+                        .transition(.opacity)
+                }
+                if j.showDailyScroll, let show = j.scrollShow {     // 回到地图：展开小卷轴，盖印、落勋章
+                    DailyScrollView(j: j, show: show) { j.showDailyScroll = false }
+                }
+            }
         }
-        .background(newArt ? SkyBackground.flatSky : Color(hex: 0xEEF0F0))
+        .task {                                                    // 停在地图上过了半夜：换天了就展开今天的卷轴
+            var day = j.today
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(30))
+                if j.today != day { day = j.today; j.maybeShowDailyScroll() }
+            }
+        }
+        // 拉过头时露出来的底色：上半和渐变最上面同色（天蓝），下半和云海同色（米白）
+        .background {
+            if newArt {
+                VStack(spacing: 0) { Color(hex: 0xA9CDEC); Color(hex: 0xFBF7EE) }.ignoresSafeArea()
+            } else {
+                Color(hex: 0xEEF0F0)
+            }
+        }
         .onAppear {
+            Task { @MainActor in                                   // 地图先露一下，卷轴再展开
+                try? await Task.sleep(for: .seconds(0.4))
+                j.maybeShowDailyScroll()
+            }
             if j.invitationPending {
                 Task { @MainActor in                               // 地图先露一下，请帖再落下来
                     try? await Task.sleep(for: .seconds(0.5))
@@ -185,7 +219,7 @@ struct WorldMapView: View {
     func showLockedNote(_ text: String) {
         withAnimation(.easeOut(duration: 0.15)) { lockedNote = text }
         Task { @MainActor in
-            try? await Task.sleep(for: .seconds(1.8))
+            try? await Task.sleep(for: .seconds(2.0))                 // 停 2 秒（1.8 读不完，2.8 太长）
             if lockedNote == text { withAnimation(.easeIn(duration: 0.25)) { lockedNote = nil } }
         }
     }
@@ -208,32 +242,36 @@ struct WorldMapView: View {
             HStack(spacing: 4) {
                 ForEach(order, id: \.self) { id in
                     let on = got.contains(id)
-                    Text(String(j.content.region(id)?.name.prefix(1) ?? "")).font(Fonts.display(13))
-                        .foregroundStyle(on ? .white : Palette.faint)
-                        .frame(width: 23, height: 23)
-                        .background(on ? Palette.red : Color.white.opacity(0.5))
-                        .overlay(Rectangle().stroke(on ? Color(hex: 0x8F1F12) : Palette.faint, style: StrokeStyle(lineWidth: 1.5, dash: on ? [] : [3, 2])))
-                        .rotationEffect(.degrees(on ? -4 : 0))
+                    let ch = String(j.content.region(id)?.name.prefix(1) ?? "")
+                    if on {                                         // 打通的：掌门印（和盖印演出同一个印）
+                        SealMark(char: ch, size: 23).rotationEffect(.degrees(-4))
+                    } else {
+                        Text(ch).font(Fonts.display(13)).foregroundStyle(Palette.faint)
+                            .frame(width: 23, height: 23)
+                            .background(Color.white.opacity(0.5))
+                            .overlay(Rectangle().stroke(Palette.faint, style: StrokeStyle(lineWidth: 1.5, dash: [3, 2])))
+                    }
                 }
             }
-            Text(peakCaption)
-                .font(.system(size: 12, weight: .bold)).foregroundStyle(j.gatheringOpen ? Palette.red : Palette.slate)
+            if let cap = peakCaption {
+                Text(cap).font(.system(size: 12, weight: .bold)).foregroundStyle(Palette.red)
+            }
         }
         .contentShape(Rectangle())
         .onTapGesture {
             closeSheet()
             if j.gatheringOpen { j.enterGathering() }               // 走完最后一座岛：上山
-            else { showLockedNote("走完「\(pathOrder.last?.name ?? "")」就能去") }
+            else { showLockedNote("挑战完十位掌门就能去") }
         }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier("place-wuLinDaHui")
     }
 
-    /// 云顶下面的一行字：当选了是「武林盟主」，开放了是「上山去」，没开放写「走完十座岛开放」。
-    var peakCaption: String {
+    /// 云顶下面的一行字：当选了是「武林盟主」，开放了是「上山去」；没开放不写（点了才提示「挑战完十位掌门就能去」）。
+    var peakCaption: String? {
         if j.crowned { return "武林盟主" }
-        return j.gatheringOpen ? "上山去" : "走完十座岛开放"
+        return j.gatheringOpen ? "上山去" : nil
     }
 
     var topBar: some View {
@@ -246,9 +284,28 @@ struct WorldMapView: View {
                     .padding(.horizontal, 12).padding(.vertical, 6)
                     .background(Color.white).overlay(Rectangle().stroke(Palette.ink, lineWidth: 2))
             }
-            .buttonStyle(.plain)
-            .overlay { if !j.booksToUnveil.isEmpty { NewBookPulse() } }
-            .overlay(alignment: .topTrailing) { if !j.booksToUnveil.isEmpty { NewDot().offset(x: 7, y: -7) } }
+            .buttonStyle(.popSmall)
+            .overlay { if j.hasNewBookDot { NewBookPulse() } }
+            .overlay(alignment: .topTrailing) {           // 新秘籍、新勋章同一个点，两样都有时只挂一个；卷轴上演过的不挂
+                if j.hasNewBookDot || j.hasNewBadges { NewDot().offset(x: 7, y: -7) }
+            }
+            .background {                                  // 卷轴飞进来的那一圈波纹
+                Rectangle().stroke(Palette.gold, lineWidth: 2.5)
+                    .padding(-16 * pingRing)
+                    .opacity(0.5 * (1 - Double(pingRing)))
+                    .allowsHitTesting(false)
+            }
+            .scaleEffect(1 + 0.3 * pingPop)
+            .background(GeometryReader { g in
+                Color.clear.onAppear { j.harvestButtonFrame = g.frame(in: .global) }
+                    .onChange(of: g.frame(in: .global)) { _, f in j.harvestButtonFrame = f }
+            })
+            .onChange(of: j.harvestPing) { _, _ in
+                pingPop = 1
+                pingRing = 0
+                withAnimation(.easeOut(duration: 0.3)) { pingPop = 0 }
+                withAnimation(.linear(duration: 0.5)) { pingRing = 1 }
+            }
             .accessibilityIdentifier("codex")
         }
         .padding(.horizontal, 16).frame(height: 56)

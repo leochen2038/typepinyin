@@ -8,6 +8,7 @@ struct Lifecycle: ViewModifier {
     func body(content: Content) -> some View {
         content.onChange(of: phase) { _, new in
             if new != .active { c.pauseForBackground() }
+            else { c.journey?.maybeShowDailyScroll() }            // 在地图上从后台回来：换了天、有没演的印和勋章就展开卷轴
         }
     }
 }

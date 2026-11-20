@@ -27,7 +27,7 @@ struct RankUpView: View {
                         .background(Palette.gold).foregroundStyle(Palette.ink)
                         .overlay(Rectangle().stroke(Palette.ink, lineWidth: 3))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.pop)
             }
             .padding(24)
         }

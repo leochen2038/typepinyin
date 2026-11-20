@@ -78,7 +78,7 @@ struct IslandView: View {
             withAnimation(.easeInOut(duration: 3).repeatForever(autoreverses: true).delay(bobDelay.truncatingRemainder(dividingBy: 3))) { bob = true }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(locked ? "\(region.name)，还没解锁" : "\(region.name)，\(["未挑战", "挑战中", "已挑战"][phase == .untouched ? 0 : phase == .inProgress ? 1 : 2])\(phase != .untouched && count > 0 ? "，已集 \(count) 张词卡" : "")")
+        .accessibilityLabel(locked ? "\(region.name)，还没解锁" : "\(region.name)，\(["未挑战", "挑战中", "已打通"][phase == .untouched ? 0 : phase == .inProgress ? 1 : 2])\(phase != .untouched && count > 0 ? "，已集 \(count) 张词卡" : "")")
         .accessibilityAddTraits(.isButton)
     }
 
@@ -212,10 +212,17 @@ struct SkyBackground: View {
         if flat {
             GeometryReader { g in
                 ZStack(alignment: .bottom) {
-                    Self.flatSky
+                    // 2026-11-19：从下往上渐变（山脚暖米黄 → 中间淡蓝 → 云顶天蓝），越往上爬天越蓝
+                    LinearGradient(stops: [.init(color: Color(hex: 0xA9CDEC), location: 0),
+                                           .init(color: Color(hex: 0xCFE2F2), location: 0.3),
+                                           .init(color: Color(hex: 0xE6EDF2), location: 0.65),
+                                           .init(color: Color(hex: 0xF5EAD6), location: 1)],
+                                   startPoint: .top, endPoint: .bottom)
+                        .padding(.bottom, -40)                // 往下多铺一截：云海压在内容底边以下，鼓包之间的缝要露出天色，不能露出外面的底色
+                    FarMountains(width: g.size.width).frame(maxHeight: .infinity, alignment: .top)
                     CloudSea().fill(Color(hex: 0xFBF7EE)).overlay(CloudSea().stroke(Palette.ink, style: StrokeStyle(lineWidth: 1.15, lineJoin: .round)))
-                        .frame(width: g.size.width + 4, height: 126)
-                        .offset(y: 112)                    // 下面多伸一截，滚到底、回弹时都看不到云海的底边；也别顶到右下角练功房的字
+                        .frame(width: g.size.width + 4, height: 526)
+                        .offset(y: 512)                    // 往下拉长 400：底下拉过头时看不到云海的底边（黑线）                    // 下面多伸一截，滚到底、回弹时都看不到云海的底边；也别顶到右下角练功房的字
                 }
             }
             .allowsHitTesting(false)
@@ -234,6 +241,58 @@ struct SkyBackground: View {
                 }
             }
         }
+        .allowsHitTesting(false)
+    }
+}
+
+/// 秘籍页、练习场的底（2026-11-19，和江湖地图统一）：同一道天空渐变，顶上远山，底下一道云海；固定不跟着内容滚。
+struct SkyPage: View {
+    var body: some View {
+        GeometryReader { g in
+            ZStack(alignment: .bottom) {
+                LinearGradient(stops: [.init(color: Color(hex: 0xA9CDEC), location: 0),
+                                       .init(color: Color(hex: 0xCFE2F2), location: 0.3),
+                                       .init(color: Color(hex: 0xE6EDF2), location: 0.65),
+                                       .init(color: Color(hex: 0xF5EAD6), location: 1)],
+                               startPoint: .top, endPoint: .bottom)
+                FarMountains(width: g.size.width).frame(maxHeight: .infinity, alignment: .top).opacity(0.8)
+                CloudSea().fill(Color(hex: 0xFBF7EE)).overlay(CloudSea().stroke(Palette.ink, style: StrokeStyle(lineWidth: 1.15, lineJoin: .round)))
+                    .frame(width: g.size.width + 4, height: 70)
+                    .offset(y: 30)
+            }
+        }
+        .ignoresSafeArea(edges: .bottom)
+        .allowsHitTesting(false)
+    }
+}
+
+/// 云顶后面的远山：两层淡蓝灰的山脊剪影，不描边，前一层深一点；衬在武林大会后面，让山顶像终点。
+struct FarMountains: View {
+    let width: CGFloat
+
+    var body: some View {
+        Canvas { ctx, size in
+            let w = size.width
+            func ridge(_ pts: [(Double, Double)], base: Double) -> Path {
+                var p = Path()
+                p.move(to: CGPoint(x: 0, y: base))
+                for (x, y) in pts { p.addLine(to: CGPoint(x: x * w, y: y)) }
+                p.addLine(to: CGPoint(x: w, y: base))
+                p.closeSubpath()
+                return p
+            }
+            // 远的一层：高、浅
+            let far = ridge([(0, 150), (0.08, 118), (0.16, 132), (0.27, 84), (0.36, 112), (0.44, 96), (0.5, 70), (0.57, 98),
+                             (0.66, 88), (0.74, 120), (0.83, 78), (0.92, 110), (1, 96)], base: 330)
+            ctx.fill(far, with: .color(Color(hex: 0x8FB3D6).opacity(0.45)))
+            // 近的一层：矮、深一点
+            let near = ridge([(0, 190), (0.1, 164), (0.2, 182), (0.3, 150), (0.4, 176), (0.5, 160), (0.6, 178), (0.7, 146),
+                              (0.8, 170), (0.9, 156), (1, 176)], base: 330)
+            ctx.fill(near, with: .color(Color(hex: 0x7EA4CB).opacity(0.4)))
+        }
+        // 往下淡出（用遮罩，不再盖一块天色：底下天色各页不一样，盖色块会露出一道边）
+        .frame(width: width, height: 330)
+        .mask(LinearGradient(stops: [.init(color: .black, location: 0.5), .init(color: .clear, location: 1)], startPoint: .top, endPoint: .bottom))
         .allowsHitTesting(false)
     }
 }
@@ -302,18 +361,41 @@ struct PeakArt: View {
     }
 }
 
+/// 圆印的按下样式（2026-11-19）：按住时缩小一点、往右下沉（圆印图自带右下的影子，沉下去像压到影子上），松开弹回；按下时轻震。不变灰。
+struct SealPress: ButtonStyle {
+    var forced = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        let down = configuration.isPressed || forced
+        configuration.label
+            .scaleEffect(down ? 0.92 : 1)
+            .offset(x: down ? 2 : 0, y: down ? 2 : 0)
+            .animation(.spring(duration: down ? 0.05 : 0.2, bounce: down ? 0 : 0.5), value: down)
+            .sensoryFeedback(.impact(weight: .light), trigger: down) { _, new in new }
+    }
+}
+
 /// 练功房：右下角一枚圆印，里面一个木人桩，下面「练功房」和词卡总数。固定在屏幕上，不随地图动。
 struct PracticeSeal: View {
     let count: Int
     /// 新画法：圆印 48 点，木人桩用拳场那个；关掉回到原来 58 点、圆头的木人桩。
     var useArt = true
     let action: () -> Void
+    /// 轻点太快、系统来不及显示按住时，抬手后补一下按下去（0.06 秒）再进去。
+    @State private var forced = false
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            forced = true
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(0.06))
+                forced = false
+                action()
+            }
+        } label: {
             VStack(spacing: 2) {
                 if useArt {
-                    Image("practice-seal").resizable().frame(width: 52, height: 52)
+                    Image("practice-seal").resizable().frame(width: 60, height: 60)   // 2026-11-19：52 → 60
                 } else {
                     oldSeal
                 }
@@ -321,7 +403,7 @@ struct PracticeSeal: View {
                 Text("\(count) 张").font(.system(size: 11, weight: .bold)).foregroundStyle(Palette.slate)
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(SealPress(forced: forced))
         .accessibilityLabel("练习场，你的词卡 \(count) 张")
     }
 

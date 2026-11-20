@@ -31,7 +31,7 @@ final class AllRegionsUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["stationLine"].exists)
     }
 
-    /// 通关后再去一趟：从头走一整趟（不是随机一场），站前照样问挑战，顶栏写第几站、还剩几站。
+    /// 通关后再去一趟：从头走一整趟（不是随机一场），站前照样问挑战。
     func testClearedRegionStartsFullRoute() {
         let app = launch(obtain: "base,biyin-shang")
         let isle = app.descendants(matching: .any)["place-banshanzhen"]
@@ -42,31 +42,6 @@ final class AllRegionsUITests: XCTestCase {
         XCTAssertEqual(go.label, "再去一趟")
         go.tap()
         XCTAssertTrue(stationCardAppears(app), "从第一站开始，先问挑战或去看看")
-        let bar = app.staticTexts.containing(NSPredicate(format: "label BEGINSWITH '第 1 站'")).firstMatch
-        XCTAssertTrue(bar.exists, "顶栏写第几站")
-        XCTAssertTrue(bar.label.contains("还剩"), "是完整的一趟：\(bar.label)")
-    }
-
-    /// 走到一半的地区：卡片上有「从头开始」，确认后从第一站重新走。
-    func testRestartRegion() {
-        let app = launch(obtain: "base")
-        let isle = app.descendants(matching: .any)["place-banshanzhen"]
-        XCTAssertTrue(isle.waitForExistence(timeout: 15))
-        isle.tap()
-        app.buttons["regionGo"].tap()
-        XCTAssertTrue(app.buttons["返回"].waitForExistence(timeout: 15))
-        app.buttons["返回"].tap()
-        XCTAssertTrue(isle.waitForExistence(timeout: 10))
-        isle.tap()
-        XCTAssertTrue(app.buttons["regionGo"].waitForExistence(timeout: 5))
-        XCTAssertEqual(app.buttons["regionGo"].label, "接着走")
-        let restart = app.buttons["regionRestart"]
-        XCTAssertTrue(restart.exists, "走到一半有「从头开始」")
-        restart.tap()
-        XCTAssertTrue(app.staticTexts["这一趟从第一站重新走？"].waitForExistence(timeout: 5))
-        // 确认框里的按钮没有标识，只有文字；卡片上那个的标识是 regionRestart
-        app.buttons.matching(NSPredicate(format: "label == '从头开始' AND identifier != 'regionRestart'")).firstMatch.tap()
-        XCTAssertTrue(stationCardAppears(app), "重新从第一站开始")
     }
 
     func testAllTenSealsAndGathering() {

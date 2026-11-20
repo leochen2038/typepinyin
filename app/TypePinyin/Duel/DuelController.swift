@@ -49,6 +49,8 @@ final class DuelController {
     private(set) var hint = ""
     private(set) var summary: DuelSummary?
     private(set) var pausedForBackground = false
+    /// 是玩家点了暂停键（不是切到后台）：暂停卡片上多一个「退出比武」，音乐压掉。
+    private(set) var pausedByPlayer = false
     private(set) var elapsed: Double = 0
     private(set) var mistakeFlash = 0
     private(set) var stunned = false
@@ -222,6 +224,10 @@ final class DuelController {
     let latency = LatencyMeter()
     let sounds = SoundFX()
     let music = MusicLayers()
+    /// 比武以外的配乐（旅程按场景换）。
+    let ambient = AmbientMusic()
+    /// 词牌下面那行小字（旅程给：「白梅台秘籍 · 2 级」）；nil = 原来的卷名和重数。
+    @ObservationIgnored var cardLabel: ((Word) -> String?)?
     private let speaker = Speaker()
 
     /// 旅程给的下一场：词表、单场设置、出牌来源、对手、打完的回调。nil = 切片的比武。
@@ -397,6 +403,9 @@ final class DuelController {
         music.stop()
     }
 
+    /// 离开比武时收起上一场的结算（比武画面已经不在了，不用动画）。
+    func clearSummary() { summary = nil }
+
     func restart() {
         round += 1
         sounds.play(.retry)
@@ -442,7 +451,27 @@ final class DuelController {
         sync()
     }
 
+    /// 计时下面的暂停键：停表、停出招、音乐压掉，出暂停卡片。必杀定格、结算时不管。
+    func pauseByPlayer() {
+        guard summary == nil, !pausedForBackground else { return }
+        apply(engine.pause(.background, at: CACurrentMediaTime()))
+        guard case .paused(.background) = engine.phase else { return }
+        pausedForBackground = true
+        pausedByPlayer = true
+        music.hold(true)
+        sync()
+    }
+
+    /// 暂停卡片上的「退出比武」：这一场不算、不出结算，停表停音乐；回哪里由比武画面交给的 onQuit 定。
+    func quitDuel() {
+        pausedForBackground = false
+        pausedByPlayer = false
+        suspend()
+    }
+
     func resumeFromBackground() {
+        if pausedByPlayer { music.hold(false) }
+        pausedByPlayer = false
         pausedForBackground = false
         apply(engine.resume(at: CACurrentMediaTime()))
         sync()
@@ -964,7 +993,7 @@ final class DuelController {
         }
         let newCards: [CardVM] = engine.cards.enumerated().map { i, c in
             CardVM(id: c.id, text: c.word.text, syllables: c.word.syllables, typed: c.typed, weight: c.weight(t).rawValue,
-                   volumeLabel: Self.volumeName(c.word.volume) + " · " + Self.rankName(c.rank),
+                   volumeLabel: cardLabel?(c.word) ?? (Self.volumeName(c.word.volume) + " · " + Self.rankName(c.rank)),
                    store: (engine.storeMultiplier(ofCard: i) * 10).rounded() / 10, flaw: c.hasFlaw,
                    finisher: c.isFinisher, locked: engine.target == .card(i), inactive: c.inactive)
         }

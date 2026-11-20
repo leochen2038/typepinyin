@@ -25,9 +25,8 @@ struct OpeningView: View {
                 Text(button).font(Fonts.display(26)).padding(.horizontal, 44).padding(.vertical, 12)
                     .background(Palette.gold).foregroundStyle(Palette.ink)
                     .overlay(Rectangle().stroke(Palette.ink, lineWidth: 3))
-                    .compositingGroup().shadow(color: Palette.ink, radius: 0, x: 3, y: 3)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.pop)
             .accessibilityIdentifier("openingStart")
         }
             .opacity(shown ? 1 : 0)
